@@ -4,6 +4,7 @@ from textwrap import dedent
 
 import redis
 from dotenv import load_dotenv
+from more_itertools import chunked
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler
 from telegram.ext import Filters, Updater
@@ -28,8 +29,26 @@ def start(update, context):
     Returns:
         str: состояние HANDLE_MENU
     """
+    page_number = context.chat_data.setdefault('page_number', 0)
+    current_page_number = context.chat_data.setdefault('current_page_number', -1)
+    if page_number == current_page_number:
+        return 'HANDLE_MENU'
+
     products = online_shop.get_all_products()
-    keyboard = get_products_keyboard(products)
+    product_pages = list(chunked(products, context.bot_data['products_per_page_number']))
+    pages_count = len(product_pages) - 1
+    next_page_number = min(page_number + 1, pages_count)
+    previous_page_number = max(0, page_number - 1)
+    context.chat_data['current_page_number'] = page_number
+
+    keyboard = get_products_keyboard(product_pages[page_number])
+    keyboard.append(
+        [
+            InlineKeyboardButton(f'Пред {previous_page_number+1} из {pages_count + 1}',
+                                 callback_data=str(previous_page_number)),
+            InlineKeyboardButton(f'След {next_page_number+1} из {pages_count + 1}', callback_data=str(next_page_number))
+        ]
+    )
     keyboard.append([get_cart_button()])
     reply_markup = InlineKeyboardMarkup(keyboard)
     if update.message:
@@ -45,7 +64,7 @@ def start(update, context):
 def handle_menu(update, context):
     """Хэндлер для состояния HANDLE_MENU.
 
-    Выводит карточку товара из нажатой в меню кнопки, либо переходит в корзину.
+    Выводит карточку товара из нажатой в меню кнопки, обрабатывает пагинацию, либо переходит в корзину.
 
     Args:
         update (:class:`telegram.Update`): Incoming telegram update.
@@ -61,6 +80,12 @@ def handle_menu(update, context):
             return handle_cart(update, context)
 
         query = update.callback_query
+        if len(query.data) < 2:
+            page_number = int(query.data)
+            context.chat_data['page_number'] = page_number
+            start(update, context)
+            return 'HANDLE_MENU'
+
         logger.info(f'Выбран товар с id {query.data}')
         product = online_shop.get_product(query.data)
 
@@ -303,4 +328,8 @@ if __name__ == '__main__':
     dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
     dispatcher.add_handler(CommandHandler('start', handle_users_reply))
     dispatcher.add_error_handler(handle_error)
+
+    products_per_page_number = 9
+    dispatcher.bot_data['products_per_page_number'] = products_per_page_number
+
     updater.start_polling()
