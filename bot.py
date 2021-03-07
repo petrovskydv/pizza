@@ -3,6 +3,7 @@ import os
 from textwrap import dedent
 
 import redis
+import telegram
 from dotenv import load_dotenv
 from more_itertools import chunked
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -11,7 +12,7 @@ from telegram.ext import Filters, Updater
 
 import online_shop
 from keyboards import get_products_keyboard, get_purchase_options_keyboard, get_cart_button, get_menu_button, \
-    get_text_and_buttons_for_cart
+    get_text_and_buttons_for_cart, get_pagination_buttons
 
 _database = None
 logger = logging.getLogger(__name__)
@@ -29,34 +30,32 @@ def start(update, context):
     Returns:
         str: состояние HANDLE_MENU
     """
-    page_number = context.chat_data.setdefault('page_number', 0)
-    current_page_number = context.chat_data.setdefault('current_page_number', -1)
-    if page_number == current_page_number:
-        return 'HANDLE_MENU'
+    page_number = context.chat_data.setdefault('page_number', 1)
 
     products = online_shop.get_all_products()
     product_pages = list(chunked(products, context.bot_data['products_per_page_number']))
-    pages_count = len(product_pages) - 1
+    pages_count = len(product_pages)
     next_page_number = min(page_number + 1, pages_count)
-    previous_page_number = max(0, page_number - 1)
+    previous_page_number = max(1, page_number - 1)
     context.chat_data['current_page_number'] = page_number
 
-    keyboard = get_products_keyboard(product_pages[page_number])
-    keyboard.append(
-        [
-            InlineKeyboardButton(f'Пред {previous_page_number+1} из {pages_count + 1}',
-                                 callback_data=str(previous_page_number)),
-            InlineKeyboardButton(f'След {next_page_number+1} из {pages_count + 1}', callback_data=str(next_page_number))
-        ]
-    )
+    keyboard = get_products_keyboard(product_pages[page_number - 1])
+    pagination_buttons = get_pagination_buttons(next_page_number, page_number, pages_count, previous_page_number)
+    keyboard.append(pagination_buttons)
     keyboard.append([get_cart_button()])
     reply_markup = InlineKeyboardMarkup(keyboard)
+
+    menu_text = 'Пожалуйста, выберите товар:'
     if update.message:
-        update.message.reply_text(text='Привет!', reply_markup=reply_markup)
+        update.message.reply_text(text=menu_text, reply_markup=reply_markup)
     elif update.callback_query:
         message = update.callback_query.message
-        context.bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-        message.reply_text(text='Привет!', reply_markup=reply_markup)
+        if len(message.photo) > 0:
+            context.bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text=menu_text,
+                                          reply_markup=reply_markup)
+        else:
+            context.bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+            message.reply_text(text=menu_text, reply_markup=reply_markup)
     logger.info('Выведен список товаров')
     return 'HANDLE_MENU'
 
@@ -76,10 +75,12 @@ def handle_menu(update, context):
     if update.message:
         return 'HANDLE_MENU'
     if update.callback_query:
-        if update.callback_query.data == 'cart':
-            return handle_cart(update, context)
-
         query = update.callback_query
+        if query.data == 'cart':
+            return handle_cart(update, context)
+        elif query.data == 'back':
+            return start(update, context)
+
         if len(query.data) < 2:
             page_number = int(query.data)
             context.chat_data['page_number'] = page_number
@@ -169,8 +170,13 @@ def handle_cart(update, context):
     {text}
         К оплате: {total}
     '''
-    context.bot.delete_message(chat_id=query.message.chat.id, message_id=query.message.message_id)
-    update.callback_query.message.reply_text(text=dedent(cart_text), reply_markup=reply_markup)
+    if len(query.message.photo) > 0:
+        context.bot.edit_message_text(chat_id=query.message.chat.id, message_id=query.message.message_id,
+                                      text=dedent(cart_text), reply_markup=reply_markup)
+    else:
+        context.bot.delete_message(chat_id=query.message.chat.id, message_id=query.message.message_id)
+        update.callback_query.message.reply_text(text=dedent(cart_text), reply_markup=reply_markup)
+
     return 'HANDLE_CART_EDIT'
 
 
@@ -189,6 +195,7 @@ def handle_cart_edit(update, context):
     if update.message:
         return 'HANDLE_CART_EDIT'
     if update.callback_query:
+        query = update.callback_query
         if update.callback_query.data == 'back':
             return start(update, context)
         elif update.callback_query.data == 'payment':
@@ -196,7 +203,6 @@ def handle_cart_edit(update, context):
             update.callback_query.message.reply_text(text='Пришлите, пожалуйста, ваш e-mail')
             return 'CREATE_CUSTOMER'
 
-        query = update.callback_query
         logger.info(f'Удаляем из корзины {query.message.chat.id} товар с id {query.data}')
         online_shop.remove_product_from_cart(query.message.chat.id, query.data)
         handle_cart(update, context)
@@ -243,6 +249,16 @@ def new_order(update, context):
         message = update.callback_query.message
         message.reply_text(text=message_text)
     return 'END'
+
+
+def location(update, context):
+    message = None
+    if update.edited_message:
+        message = update.edited_message
+    else:
+        message = update.message
+    current_pos = (message.location.latitude, message.location.longitude)
+    print(current_pos)
 
 
 def handle_users_reply(update, context):
@@ -327,9 +343,10 @@ if __name__ == '__main__':
     dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
     dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
     dispatcher.add_handler(CommandHandler('start', handle_users_reply))
+    dispatcher.add_handler(MessageHandler(Filters.location, location))
     dispatcher.add_error_handler(handle_error)
 
-    products_per_page_number = 9
+    products_per_page_number = 7
     dispatcher.bot_data['products_per_page_number'] = products_per_page_number
 
     updater.start_polling()

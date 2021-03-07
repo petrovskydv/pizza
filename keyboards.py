@@ -50,3 +50,17 @@ def get_text_and_buttons_for_cart(products):
         keyboard.append([InlineKeyboardButton(f'Убрать из корзины {product["name"]}',
                                               callback_data=product['id'])])
     return keyboard, cart_text
+
+
+def get_pagination_buttons(next_page_number, page_number, pages_count, previous_page_number):
+    pagination_buttons = []
+    if page_number > 1:
+        pagination_buttons.append(
+            InlineKeyboardButton(f'Пред {previous_page_number} из {pages_count}',
+                                 callback_data=str(previous_page_number))
+        )
+    if page_number != pages_count:
+        pagination_buttons.append(
+            InlineKeyboardButton(f'След {next_page_number} из {pages_count}', callback_data=str(next_page_number))
+        )
+    return pagination_buttons
