@@ -34,9 +34,29 @@ def create_products():
             print(e.response.text)
 
 
-def create_flow():
-    flow_id = online_shop.create_flow('Pizzeria', 'Названия и адреса пиццерий')
+def create_flow(flow, field_names, field_descriptions):
+    try:
+        flow_id = online_shop.create_flow(flow['name'], flow['description'])
+        for field_description in field_descriptions:
+            field = dict(zip(field_names, field_description))
+            online_shop.create_flow_field(flow_id, field)
+    except requests.exceptions.HTTPError as e:
+        print(e.response.text)
 
+
+def fill_pizzeria_addresses():
+    pizzerias = open_json_file('addresses.json')
+    for pizzeria in pizzerias:
+        fields = {
+            'Alias': pizzeria['alias'],
+            'Address': pizzeria['address']['full'],
+            'Longitude': pizzeria['coordinates']['lon'],
+            'Latitude': pizzeria['coordinates']['lat']
+        }
+        try:
+            online_shop.create_flow_entry('Pizzeria', fields)
+        except requests.exceptions.HTTPError as e:
+            print(e.response.text)
 
 
 def main():
@@ -47,6 +67,20 @@ def main():
     online_shop.set_headers()
 
     # create_products()
+
+    # flow = {
+    #     'name': 'Pizzeria',
+    #     'description': 'Названия и адреса пиццерий'
+    # }
+    # field_names = ['name', 'description', 'type']
+    # field_descriptions = [
+    #     ['Address', 'Адрес пиццерии', 'string'],
+    #     ['Alias', 'Название пиццерии', 'string'],
+    #     ['Longitude', 'Долгота', 'float'],
+    #     ['Latitude', 'Широта', 'float']
+    # ]
+    # create_flow(flow, field_names, field_descriptions)
+    fill_pizzeria_addresses()
 
 
 if __name__ == '__main__':

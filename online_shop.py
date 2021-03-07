@@ -106,10 +106,10 @@ def create_product_main_image(product_id, image_id):
 
 
 def create_flow(flow_name, flow_description):
-    logger.info(f'Устанавливаем основную картинку товара {product_id}')
+    logger.info(f'Создаем новый flow {flow_name}')
     data = {
         'data': {
-            'type': 'type',
+            'type': 'flow',
             'name': flow_name,
             'slug': flow_name,
             'description': flow_description,
@@ -122,26 +122,44 @@ def create_flow(flow_name, flow_description):
     return review_result['data']['id']
 
 
-def create_flow_field(flow_id, flow_description):
-    logger.info(f'Устанавливаем основную картинку товара {product_id}')
+def create_flow_field(flow_id, field):
+    logger.info(f'Создаем поле {field} для flow_id {flow_id}')
     data = {
         'data': {
-            'type': 'type',
-            'name': flow_name,
-            'slug': flow_name,
-            'field_type': 'string',
-            'description': flow_description,
+            'type': 'field',
+            'name': field['name'],
+            'slug': field['name'],
+            'field_type': field['type'],
+            'description': field['description'],
             'required': True,
             'enabled': True,
             'relationships': {
-                'data': {
-                    'type': 'flow',
-                    'name': flow_id,
+                'flow': {
+                    'data': {
+                        'type': 'flow',
+                        'id': flow_id,
+                    }
                 }
             }
         }
     }
-    response = requests.post('https://api.moltin.com/v2/flows', headers=_headers, json=data)
+    response = requests.post('https://api.moltin.com/v2/fields', headers=_headers, json=data)
+    response.raise_for_status()
+    review_result = response.json()
+    return review_result['data']['id']
+
+
+def create_flow_entry(flow_slug, fields):
+    logger.info(f'Создаем новую запись {fields} в {flow_slug}')
+    data = {
+        'data': {
+            'type': 'entry'
+        }
+    }
+    for field_name, field_value in fields.items():
+        data['data'][field_name] = field_value
+
+    response = requests.post(f'https://api.moltin.com/v2/flows/{flow_slug}/entries', headers=_headers, json=data)
     response.raise_for_status()
     review_result = response.json()
     return review_result['data']['id']
