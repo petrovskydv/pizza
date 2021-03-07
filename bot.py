@@ -50,7 +50,7 @@ def start(update, context):
         update.message.reply_text(text=menu_text, reply_markup=reply_markup)
     elif update.callback_query:
         message = update.callback_query.message
-        if len(message.photo) > 0:
+        if len(message.photo) == 0:
             context.bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text=menu_text,
                                           reply_markup=reply_markup)
         else:
@@ -80,6 +80,8 @@ def handle_menu(update, context):
             return handle_cart(update, context)
         elif query.data == 'back':
             return start(update, context)
+        elif query.data == 'current':
+            return 'HANDLE_MENU'
 
         if len(query.data) < 2:
             page_number = int(query.data)
@@ -170,7 +172,7 @@ def handle_cart(update, context):
     {text}
         К оплате: {total}
     '''
-    if len(query.message.photo) > 0:
+    if len(query.message.photo) == 0:
         context.bot.edit_message_text(chat_id=query.message.chat.id, message_id=query.message.message_id,
                                       text=dedent(cart_text), reply_markup=reply_markup)
     else:

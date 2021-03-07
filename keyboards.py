@@ -56,11 +56,11 @@ def get_pagination_buttons(next_page_number, page_number, pages_count, previous_
     pagination_buttons = []
     if page_number > 1:
         pagination_buttons.append(
-            InlineKeyboardButton(f'Пред {previous_page_number} из {pages_count}',
-                                 callback_data=str(previous_page_number))
+            InlineKeyboardButton(f'Предыдущая', callback_data=str(previous_page_number))
         )
+    pagination_buttons.append(InlineKeyboardButton(f'Страница {page_number} из {pages_count}', callback_data='current'))
     if page_number != pages_count:
         pagination_buttons.append(
-            InlineKeyboardButton(f'След {next_page_number} из {pages_count}', callback_data=str(next_page_number))
+            InlineKeyboardButton(f'Следующая', callback_data=str(next_page_number))
         )
     return pagination_buttons
