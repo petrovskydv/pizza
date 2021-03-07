@@ -34,6 +34,7 @@ def get_all_products():
     for product in review_result['data']:
         product_for_menu = {
             'id': product['id'],
+            'name': product['name'],
             'description': product['description'],
             'price': product['price'][0]['amount']
         }
