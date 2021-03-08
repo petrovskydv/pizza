@@ -239,7 +239,6 @@ def create_customer(update, context):
             current_position = fetch_coordinates(context.bot_data['yandex_geocoder_token'], message.text)
             if current_position:
                 logger.info(f'Получили координаты {current_position}')
-                # TODO вывести полученный адрес
                 # return 'END'
             else:
                 logger.info('Не удалось получить координаты')
@@ -291,7 +290,6 @@ def new_order(update, context):
         query = update.callback_query
         nearest_pizzeria = context.chat_data['nearest_pizzeria']
         if query.data == 'delivery':
-            # TODO Если пользователь выбрал доставку, получите адрес пользователя от Moltin.
             customer_address = online_shop.get_entry('Customer_Address', context.chat_data['address_id'])
             deliver_telegram_id = nearest_pizzeria['pizzeria']['Deliver_telegram_id']
             query.bot.send_message(chat_id=deliver_telegram_id, text=context.chat_data['cart_text'])
