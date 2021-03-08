@@ -64,3 +64,15 @@ def get_pagination_buttons(next_page_number, page_number, pages_count, previous_
             InlineKeyboardButton(f'Следующая', callback_data=str(next_page_number))
         )
     return pagination_buttons
+
+
+def get_delivery_buttons():
+    keyboard = [
+        [
+            InlineKeyboardButton('Доставка', callback_data='delivery')
+        ],
+        [
+            InlineKeyboardButton('Самовывоз', callback_data='pick-up')
+        ]
+    ]
+    return keyboard

@@ -13,7 +13,7 @@ from telegram.ext import Filters, Updater
 import online_shop
 from utils import fetch_coordinates, get_nearest_pizzeria, get_delivery_cost_and_message_text
 from keyboards import get_products_keyboard, get_purchase_options_keyboard, get_cart_button, get_menu_button, \
-    get_text_and_buttons_for_cart, get_pagination_buttons
+    get_text_and_buttons_for_cart, get_pagination_buttons, get_delivery_buttons
 
 _database = None
 logger = logging.getLogger(__name__)
@@ -133,12 +133,12 @@ def handle_description(update, context):
     if update.message:
         return 'HANDLE_DESCRIPTION'
     if update.callback_query:
-        if update.callback_query.data == 'cart':
+        query = update.callback_query
+        if query.data == 'cart':
             return handle_cart(update, context)
-        elif update.callback_query.data == 'back':
+        elif query.data == 'back':
             return start(update, context)
 
-        query = update.callback_query
         product_id, quantity = query.data.split(',')
         logger.info(f'Добавляем товар с id {product_id} в количестве {quantity} корзину {query.message.chat.id}')
         online_shop.add_product_to_cart(query.message.chat.id, product_id, int(quantity))
@@ -173,12 +173,15 @@ def handle_cart(update, context):
     {text}
         К оплате: {total}
     '''
+    aligned_cart_text = dedent(cart_text)
     if len(query.message.photo) == 0:
         context.bot.edit_message_text(chat_id=query.message.chat.id, message_id=query.message.message_id,
-                                      text=dedent(cart_text), reply_markup=reply_markup)
+                                      text=aligned_cart_text, reply_markup=reply_markup)
     else:
         context.bot.delete_message(chat_id=query.message.chat.id, message_id=query.message.message_id)
-        update.callback_query.message.reply_text(text=dedent(cart_text), reply_markup=reply_markup)
+        update.callback_query.message.reply_text(text=aligned_cart_text, reply_markup=reply_markup)
+
+    context.chat_data['cart_text'] = aligned_cart_text
 
     return 'HANDLE_CART_EDIT'
 
@@ -199,9 +202,9 @@ def handle_cart_edit(update, context):
         return 'HANDLE_CART_EDIT'
     if update.callback_query:
         query = update.callback_query
-        if update.callback_query.data == 'back':
+        if query.data == 'back':
             return start(update, context)
-        elif update.callback_query.data == 'payment':
+        elif query.data == 'payment':
             logger.info('Запрашиваем email')
             update.callback_query.message.reply_text(text='Пришлите, пожалуйста, ваш адрес текстом или геолокацию')
             return 'CREATE_CUSTOMER'
@@ -240,14 +243,32 @@ def create_customer(update, context):
                 # return 'END'
             else:
                 logger.info('Не удалось получить координаты')
-                update.message.reply_text(text='Не удалось распознать адрес. Попробуйте ввести еще раз')
+                message.reply_text(text='Не удалось распознать адрес. Попробуйте ввести еще раз')
                 return 'CREATE_CUSTOMER'
         pizzerias = online_shop.get_all_entries('Pizzeria')
         nearest_pizzeria = get_nearest_pizzeria(current_position, pizzerias)
         delivery_cost, message_text = get_delivery_cost_and_message_text(nearest_pizzeria)
-        update.message.reply_text(text=dedent(message_text))
+        keyboard = get_delivery_buttons()
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(text=dedent(message_text), reply_markup=reply_markup)
+
+        address_id = save_customer_address(message.chat_id, current_position)
+
+        context.chat_data['nearest_pizzeria'] = nearest_pizzeria
+        context.chat_data['address_id'] = address_id
+        context.chat_data['delivery_cost'] = delivery_cost
 
     return 'END'
+
+
+def save_customer_address(chat_id, current_position):
+    latitude, longitude = current_position
+    customer_address = {
+        'Customer_chat_id': chat_id,
+        'Longitude': longitude,
+        'Latitude': latitude
+    }
+    return online_shop.create_flow_entry('Customer_Address', customer_address)
 
 
 def new_order(update, context):
@@ -262,13 +283,23 @@ def new_order(update, context):
     Returns:
         str: состояние END
     """
-    message_text = 'Оформление заказа окончено. Чтобы начать новый заказ введите /start'
+    # message_text = 'Оформление заказа окончено. Чтобы начать новый заказ введите /start'
+    # TODO исправить название хендлера
     if update.message:
-        message = update.message
-        message.reply_text(text=message_text)
-    elif update.callback_query:
-        message = update.callback_query.message
-        message.reply_text(text=message_text)
+        return 'END'
+    if update.callback_query:
+        query = update.callback_query
+        nearest_pizzeria = context.chat_data['nearest_pizzeria']
+        if query.data == 'delivery':
+            # TODO Если пользователь выбрал доставку, получите адрес пользователя от Moltin.
+            customer_address = online_shop.get_entry('Customer_Address', context.chat_data['address_id'])
+            deliver_telegram_id = nearest_pizzeria['pizzeria']['Deliver_telegram_id']
+            query.bot.send_message(chat_id=deliver_telegram_id, text=context.chat_data['cart_text'])
+            query.bot.send_location(chat_id=deliver_telegram_id, latitude=customer_address['Latitude'],
+                                    longitude=customer_address['Longitude'])
+        elif query.data == 'pick-up':
+            query.message.reply_text(text=f'Адрес ближайшей пиццерии {nearest_pizzeria["pizzeria"]["Address"]}')
+
     return 'END'
 
 

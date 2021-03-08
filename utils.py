@@ -41,7 +41,7 @@ def get_nearest_pizzeria(current_position, pizzerias):
 def get_delivery_cost_and_message_text(nearest_pizzeria):
     nearest_pizzeria_distance = nearest_pizzeria['distance']
     nearest_pizzeria_distance_km = round(nearest_pizzeria_distance / 1000, 1)
-    nearest_pizzeria_address = nearest_pizzeria['pizzeria']["Address"]
+    nearest_pizzeria_address = nearest_pizzeria['pizzeria']['Address']
 
     message_text_template = '''\
         Можете забрать пиццу из нашей пиццерии бесплатно или заказать доставку. 

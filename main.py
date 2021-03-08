@@ -80,7 +80,19 @@ def main():
     #     ['Latitude', 'Широта', 'float']
     # ]
     # create_flow(flow, field_names, field_descriptions)
-    fill_pizzeria_addresses()
+    # fill_pizzeria_addresses()
+
+    flow = {
+        'name': 'Customer_Address',
+        'description': 'Адрес покупателя'
+    }
+    field_names = ['name', 'description', 'type']
+    field_descriptions = [
+        ['Customer_chat_id', 'chat_id покупателя', 'string'],
+        ['Longitude', 'Долгота', 'float'],
+        ['Latitude', 'Широта', 'float']
+    ]
+    create_flow(flow, field_names, field_descriptions)
 
 
 if __name__ == '__main__':

@@ -188,6 +188,15 @@ def get_all_entries(flow_slug, url=None):
 
 
 @validate_access_token
+def get_entry(flow_slug, entry_id):
+    logger.info(f'Получаем элемент списка {flow_slug} с id {entry_id}')
+    response = requests.get(f'https://api.moltin.com/v2/flows/{flow_slug}/entries/{entry_id}', headers=_headers)
+    response.raise_for_status()
+    review_result = response.json()
+    return review_result['data']
+
+
+@validate_access_token
 def get_file_href(product_id):
     logger.info(f'Получаем ссылку основного изображения товара с id {product_id}')
     response = requests.get(f'https://api.moltin.com/v2/files/{product_id}', headers=_headers)
