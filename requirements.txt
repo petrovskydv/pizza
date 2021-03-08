@@ -3,3 +3,5 @@ requests~=2.25.1
 python-telegram-bot==13.3
 redis==3.5.3
 more-itertools~=8.7.0
+geopy~=2.1.0
+urllib3~=1.26.3

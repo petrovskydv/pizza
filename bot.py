@@ -11,6 +11,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler
 from telegram.ext import Filters, Updater
 
 import online_shop
+from utils import fetch_coordinates, get_nearest_pizzeria, get_delivery_cost_and_message_text
 from keyboards import get_products_keyboard, get_purchase_options_keyboard, get_cart_button, get_menu_button, \
     get_text_and_buttons_for_cart, get_pagination_buttons
 
@@ -202,7 +203,7 @@ def handle_cart_edit(update, context):
             return start(update, context)
         elif update.callback_query.data == 'payment':
             logger.info('Запрашиваем email')
-            update.callback_query.message.reply_text(text='Пришлите, пожалуйста, ваш e-mail')
+            update.callback_query.message.reply_text(text='Пришлите, пожалуйста, ваш адрес текстом или геолокацию')
             return 'CREATE_CUSTOMER'
 
         logger.info(f'Удаляем из корзины {query.message.chat.id} товар с id {query.data}')
@@ -223,12 +224,30 @@ def create_customer(update, context):
     Returns:
         str: состояние END
     """
+    # TODO исправить название хендлера
     if update.message:
         message = update.message
-        message.reply_text(text=f'Вы прислали эту почту: {message.text}')
-        logger.info(f'Записываем покупателя с email {message.text}')
-        online_shop.create_customer(message.from_user.first_name, message.text)
-        return 'END'
+        if message.location:
+            current_position = (message.location.latitude, message.location.longitude)
+            logger.info(f'Получили геолокацию с координатами {current_position}')
+            # return 'END'
+        else:
+            logger.info(f'Получили текст адреса {message.text}')
+            current_position = fetch_coordinates(context.bot_data['yandex_geocoder_token'], message.text)
+            if current_position:
+                logger.info(f'Получили координаты {current_position}')
+                # TODO вывести полученный адрес
+                # return 'END'
+            else:
+                logger.info('Не удалось получить координаты')
+                update.message.reply_text(text='Не удалось распознать адрес. Попробуйте ввести еще раз')
+                return 'CREATE_CUSTOMER'
+        pizzerias = online_shop.get_all_entries('Pizzeria')
+        nearest_pizzeria = get_nearest_pizzeria(current_position, pizzerias)
+        delivery_cost, message_text = get_delivery_cost_and_message_text(nearest_pizzeria)
+        update.message.reply_text(text=dedent(message_text))
+
+    return 'END'
 
 
 def new_order(update, context):
@@ -251,16 +270,6 @@ def new_order(update, context):
         message = update.callback_query.message
         message.reply_text(text=message_text)
     return 'END'
-
-
-def location(update, context):
-    message = None
-    if update.edited_message:
-        message = update.edited_message
-    else:
-        message = update.message
-    current_pos = (message.location.latitude, message.location.longitude)
-    print(current_pos)
 
 
 def handle_users_reply(update, context):
@@ -345,10 +354,11 @@ if __name__ == '__main__':
     dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
     dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
     dispatcher.add_handler(CommandHandler('start', handle_users_reply))
-    dispatcher.add_handler(MessageHandler(Filters.location, location))
+    dispatcher.add_handler(MessageHandler(Filters.location, handle_users_reply))
     dispatcher.add_error_handler(handle_error)
 
     products_per_page_number = 7
     dispatcher.bot_data['products_per_page_number'] = products_per_page_number
+    dispatcher.bot_data['yandex_geocoder_token'] = os.environ['YANDEX_GEOCODER_TOKEN']
 
     updater.start_polling()

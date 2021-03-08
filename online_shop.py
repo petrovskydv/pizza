@@ -167,6 +167,27 @@ def create_flow_entry(flow_slug, fields):
 
 
 @validate_access_token
+def get_all_entries(flow_slug, url=None):
+    logger.info(f'Получаем все элементы списка {flow_slug}')
+    entries_per_page_number = 50
+    params = {
+        'page[limit]': entries_per_page_number
+    }
+    if not url:
+        url = f'https://api.moltin.com/v2/flows/{flow_slug}/entries'
+    response = requests.get(url, headers=_headers, params=params)
+    response.raise_for_status()
+    review_result = response.json()
+    entries = review_result['data']
+    page = review_result['meta']['page']
+    next_page = review_result['links']['next']
+    if page['current'] != page['total']:
+        next_entries = get_all_entries(flow_slug, next_page)
+        entries.extend(next_entries)
+    return entries
+
+
+@validate_access_token
 def get_file_href(product_id):
     logger.info(f'Получаем ссылку основного изображения товара с id {product_id}')
     response = requests.get(f'https://api.moltin.com/v2/files/{product_id}', headers=_headers)
