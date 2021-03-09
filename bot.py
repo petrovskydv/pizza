@@ -309,7 +309,7 @@ def get_feedback(context: telegram.ext.CallbackContext):
 
     *сообщение что делать если пицца не пришла*
     '''
-    context.bot.send_message(chat_id=context.job.context, text=message_text)
+    context.bot.send_message(chat_id=context.job.context, text=dedent(message_text))
 
 
 def handle_users_reply(update, context):
