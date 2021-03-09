@@ -33,6 +33,10 @@ def get_menu_button():
     return InlineKeyboardButton('В меню', callback_data='back')
 
 
+def get_payment_button():
+    return InlineKeyboardButton('Оплата', callback_data='payment')
+
+
 def get_text_and_buttons_for_cart(products):
     cart_text = ' '
     keyboard = []

@@ -6,14 +6,14 @@ import redis
 import telegram
 from dotenv import load_dotenv
 from more_itertools import chunked
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler
+from telegram import InlineKeyboardMarkup, LabeledPrice
+from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler, PreCheckoutQueryHandler
 from telegram.ext import Filters, Updater
 
 import online_shop
-from utils import fetch_coordinates, get_nearest_pizzeria, get_delivery_cost_and_message_text
 from keyboards import get_products_keyboard, get_purchase_options_keyboard, get_cart_button, get_menu_button, \
-    get_text_and_buttons_for_cart, get_pagination_buttons, get_delivery_buttons
+    get_text_and_buttons_for_cart, get_pagination_buttons, get_delivery_buttons, get_payment_button
+from utils import fetch_coordinates, get_nearest_pizzeria, get_delivery_cost_and_message_text
 
 _database = None
 logger = logging.getLogger(__name__)
@@ -164,7 +164,7 @@ def handle_cart(update, context):
 
     keyboard, text = get_text_and_buttons_for_cart(products)
     keyboard.append([get_menu_button()])
-    keyboard.append([InlineKeyboardButton('Оплата', callback_data='payment')])
+    keyboard.append([get_payment_button()])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     cart = online_shop.get_cart(query.message.chat.id)
@@ -297,13 +297,77 @@ def new_order(update, context):
             query.bot.send_location(chat_id=deliver_telegram_id, latitude=customer_address['Latitude'],
                                     longitude=customer_address['Longitude'])
             context.job_queue.run_once(get_feedback, 30, context=query.message.chat_id)
+
+            keyboard = [[get_payment_button()]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            query.message.reply_text(text='Для оплаты нажмите кнопку "Оплатить"', reply_markup=reply_markup)
+
+            return 'HANDLE_WAITING_PAYMENT'
+
         elif query.data == 'pick-up':
             query.message.reply_text(text=f'Адрес ближайшей пиццерии {nearest_pizzeria["pizzeria"]["Address"]}')
 
     return 'END'
 
 
-def get_feedback(context: telegram.ext.CallbackContext):
+def start_payment(update, context):
+    if update.message:
+        return 'HANDLE_WAITING_PAYMENT'
+    if update.callback_query:
+        query = update.callback_query
+        logger.info(f'Начинаем оплату корзины {query.message.chat.id}')
+        chat_id = query.message.chat_id
+        title = 'Оплата заказа'
+        description = 'Пицца'
+        # select a payload just for you to recognize its the donation from your bot
+        payload = 'Custom-Payload'
+        # In order to get a provider_token see https://core.telegram.org/bots/payments#getting-a-token
+        provider_token = '410694247:TEST:136a961c-82d1-4f7c-8baf-d8c2add0bb2f'
+        start_parameter = 'test-payment'
+        currency = 'RUB'
+        # price in dollars
+        prices = []
+        products = online_shop.get_cart_items(query.message.chat.id)
+        for product in products:
+            product_price = product['meta']['display_price']['with_tax']
+            prices.append(LabeledPrice(product['name'], product_price['value']['amount']))
+        delivery_cost = context.chat_data.setdefault('delivery_cost', 0)
+
+        if delivery_cost > 0:
+            prices.append(LabeledPrice('Доставка', delivery_cost))
+
+        context.bot.send_invoice(chat_id, title, description, payload, provider_token, start_parameter, currency,
+                                 prices)
+        return 'FINISH'
+
+
+def precheckout_callback(update, context):
+    query = update.pre_checkout_query
+    # check the payload, is this from your bot?
+    if query.invoice_payload != 'Custom-Payload':
+        # answer False pre_checkout_query
+        query.answer(ok=False, error_message='Something went wrong...')
+    else:
+        query.answer(ok=True)
+
+
+def successful_payment_callback(update, context):
+    # do something after successfully receiving payment?
+    update.message.reply_text('Thank you for your payment!')
+
+
+def handle_finish(update, context):
+    message_text = 'Оформление заказа окончено. Чтобы начать новый заказ введите /start'
+    if update.message:
+        message = update.message
+        message.reply_text(text=message_text)
+    elif update.callback_query:
+        message = update.callback_query.message
+        message.reply_text(text=message_text)
+    return 'FINISH'
+
+
+def get_feedback(context):
     message_text = '''\
     Приятного аппетита! *место для рекламы*
 
@@ -354,6 +418,8 @@ def handle_users_reply(update, context):
         'HANDLE_CART_EDIT': handle_cart_edit,
         'CREATE_CUSTOMER': create_customer,
         'END': new_order,
+        'HANDLE_WAITING_PAYMENT': start_payment,
+        'FINISH': handle_finish
     }
     state_handler = states_functions[user_state]
     next_state = state_handler(update, context)
@@ -395,6 +461,8 @@ if __name__ == '__main__':
     dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
     dispatcher.add_handler(CommandHandler('start', handle_users_reply))
     dispatcher.add_handler(MessageHandler(Filters.location, handle_users_reply))
+    dispatcher.add_handler(PreCheckoutQueryHandler(precheckout_callback))
+    dispatcher.add_handler(MessageHandler(Filters.successful_payment, successful_payment_callback))
     dispatcher.add_error_handler(handle_error)
 
     products_per_page_number = 7
