@@ -267,7 +267,8 @@ def save_customer_address(chat_id, current_position):
         'Longitude': longitude,
         'Latitude': latitude
     }
-    return online_shop.create_flow_entry('Customer_Address', customer_address)
+    address_id = online_shop.create_flow_entry('Customer_Address', customer_address)
+    return address_id
 
 
 def new_order(update, context):
@@ -295,10 +296,20 @@ def new_order(update, context):
             query.bot.send_message(chat_id=deliver_telegram_id, text=context.chat_data['cart_text'])
             query.bot.send_location(chat_id=deliver_telegram_id, latitude=customer_address['Latitude'],
                                     longitude=customer_address['Longitude'])
+            context.job_queue.run_once(get_feedback, 30, context=query.message.chat_id)
         elif query.data == 'pick-up':
             query.message.reply_text(text=f'Адрес ближайшей пиццерии {nearest_pizzeria["pizzeria"]["Address"]}')
 
     return 'END'
+
+
+def get_feedback(context: telegram.ext.CallbackContext):
+    message_text = '''\
+    Приятного аппетита! *место для рекламы*
+
+    *сообщение что делать если пицца не пришла*
+    '''
+    context.bot.send_message(chat_id=context.job.context, text=message_text)
 
 
 def handle_users_reply(update, context):
