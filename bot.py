@@ -205,7 +205,7 @@ def handle_cart_edit(update, context):
         if query.data == 'back':
             return start(update, context)
         elif query.data == 'payment':
-            logger.info('Запрашиваем email')
+            logger.info('Запрашиваем адрес покупателя')
             update.callback_query.message.reply_text(text='Пришлите, пожалуйста, ваш адрес текстом или геолокацию')
             return 'CREATE_CUSTOMER'
 
@@ -293,6 +293,7 @@ def new_order(update, context):
         if query.data == 'delivery':
             customer_address = online_shop.get_entry('Customer_Address', context.chat_data['address_id'])
             deliver_telegram_id = nearest_pizzeria['pizzeria']['Deliver_telegram_id']
+            # TODO добавить сообщение со стоимостью доставки
             query.bot.send_message(chat_id=deliver_telegram_id, text=context.chat_data['cart_text'])
             query.bot.send_location(chat_id=deliver_telegram_id, latitude=customer_address['Latitude'],
                                     longitude=customer_address['Longitude'])
@@ -319,13 +320,10 @@ def start_payment(update, context):
         chat_id = query.message.chat_id
         title = 'Оплата заказа'
         description = 'Пицца'
-        # select a payload just for you to recognize its the donation from your bot
         payload = 'Custom-Payload'
-        # In order to get a provider_token see https://core.telegram.org/bots/payments#getting-a-token
-        provider_token = '410694247:TEST:136a961c-82d1-4f7c-8baf-d8c2add0bb2f'
+        provider_token = dispatcher.bot_data['bank_token']
         start_parameter = 'test-payment'
         currency = 'RUB'
-        # price in dollars
         prices = []
         products = online_shop.get_cart_items(query.message.chat.id)
         for product in products:
@@ -334,7 +332,7 @@ def start_payment(update, context):
         delivery_cost = context.chat_data.setdefault('delivery_cost', 0)
 
         if delivery_cost > 0:
-            prices.append(LabeledPrice('Доставка', delivery_cost))
+            prices.append(LabeledPrice('Доставка', delivery_cost * 100))
 
         context.bot.send_invoice(chat_id, title, description, payload, provider_token, start_parameter, currency,
                                  prices)
@@ -352,8 +350,8 @@ def precheckout_callback(update, context):
 
 
 def successful_payment_callback(update, context):
-    # do something after successfully receiving payment?
     update.message.reply_text('Thank you for your payment!')
+    logger.info('Оплата прошла успешно')
 
 
 def handle_finish(update, context):
@@ -468,5 +466,5 @@ if __name__ == '__main__':
     products_per_page_number = 7
     dispatcher.bot_data['products_per_page_number'] = products_per_page_number
     dispatcher.bot_data['yandex_geocoder_token'] = os.environ['YANDEX_GEOCODER_TOKEN']
-
+    dispatcher.bot_data['bank_token'] = os.environ['BANK_TOKEN']
     updater.start_polling()
