@@ -3,6 +3,8 @@ import logging
 import requests
 from geopy import distance
 
+import online_shop
+
 logger = logging.getLogger(__name__)
 
 
@@ -72,3 +74,14 @@ def get_delivery_cost_and_message_text(nearest_pizzeria):
         message_text = message_text_template.format(nearest_pizzeria_distance_km,
                                                     nearest_pizzeria_address, delivery_cost)
     return delivery_cost, message_text
+
+
+def save_customer_address(chat_id, current_position):
+    latitude, longitude = current_position
+    customer_address = {
+        'Customer_chat_id': chat_id,
+        'Longitude': longitude,
+        'Latitude': latitude
+    }
+    address_id = online_shop.create_flow_entry('Customer_Address', customer_address)
+    return address_id

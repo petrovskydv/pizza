@@ -13,7 +13,7 @@ from telegram.ext import Filters, Updater
 import online_shop
 from keyboards import get_products_keyboard, get_purchase_options_keyboard, get_cart_button, get_menu_button, \
     get_text_and_buttons_for_cart, get_pagination_buttons, get_delivery_buttons, get_payment_button
-from utils import fetch_coordinates, get_nearest_pizzeria, get_delivery_cost_and_message_text
+from utils import fetch_coordinates, get_nearest_pizzeria, get_delivery_cost_and_message_text, save_customer_address
 
 _database = None
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ def start(update, context):
 def handle_menu(update, context):
     """Хэндлер для состояния HANDLE_MENU.
 
-    Выводит карточку товара из нажатой в меню кнопки, обрабатывает пагинацию, либо переходит в корзину.
+    Выводит карточку товара из нажатой в меню кнопки, обрабатывает пагинацию, либо переходит в корзину или в меню.
 
     Args:
         update (:class:`telegram.Update`): Incoming telegram update.
@@ -121,7 +121,10 @@ def handle_menu(update, context):
 def handle_description(update, context):
     """Хэндлер для состояния HANDLE_DESCRIPTION.
 
-    Обрабатывает нажатие кнопок в карточке товара.
+    Обрабатывает нажатие кнопок в карточке товара:
+        * добавление товара в корзину
+        * переход в меню
+        * переход в корзину
 
     Args:
         update (:class:`telegram.Update`): Incoming telegram update.
@@ -196,7 +199,7 @@ def handle_cart_edit(update, context):
         context (:class:`telegram.ext.CallbackContext`): The context object passed to the callback.
 
     Returns:
-        str: одно из состояний: HANDLE_MENU, CREATE_CUSTOMER, HANDLE_CART_EDIT
+        str: одно из состояний: HANDLE_MENU, HANDLE_LOCATION, HANDLE_CART_EDIT
     """
     if update.message:
         return 'HANDLE_CART_EDIT'
@@ -207,7 +210,7 @@ def handle_cart_edit(update, context):
         elif query.data == 'payment':
             logger.info('Запрашиваем адрес покупателя')
             update.callback_query.message.reply_text(text='Пришлите, пожалуйста, ваш адрес текстом или геолокацию')
-            return 'CREATE_CUSTOMER'
+            return 'HANDLE_LOCATION'
 
         logger.info(f'Удаляем из корзины {query.message.chat.id} товар с id {query.data}')
         online_shop.remove_product_from_cart(query.message.chat.id, query.data)
@@ -215,38 +218,37 @@ def handle_cart_edit(update, context):
         return 'HANDLE_CART_EDIT'
 
 
-def create_customer(update, context):
-    """Хэндлер для состояния CREATE_CUSTOMER.
+def handle_location(update, context):
+    """Хэндлер для состояния HANDLE_LOCATION.
 
-    Записывает покупателя в базу CRM.
+    Обрабатывает полученные координаты или адрес и записывает в CRM, предлагает варианты: доставка или самовывоз.
 
     Args:
         update (:class:`telegram.Update`): Incoming telegram update.
         context (:class:`telegram.ext.CallbackContext`): The context object passed to the callback.
 
     Returns:
-        str: состояние END
+        str: состояние HANDLE_NEW_ORDER
     """
-    # TODO исправить название хендлера
     if update.message:
         message = update.message
         if message.location:
             current_position = (message.location.latitude, message.location.longitude)
             logger.info(f'Получили геолокацию с координатами {current_position}')
-            # return 'END'
         else:
             logger.info(f'Получили текст адреса {message.text}')
             current_position = fetch_coordinates(context.bot_data['yandex_geocoder_token'], message.text)
             if current_position:
                 logger.info(f'Получили координаты {current_position}')
-                # return 'END'
             else:
                 logger.info('Не удалось получить координаты')
                 message.reply_text(text='Не удалось распознать адрес. Попробуйте ввести еще раз')
-                return 'CREATE_CUSTOMER'
-        pizzerias = online_shop.get_all_entries('Pizzeria')
+                return 'HANDLE_LOCATION'
+
+        pizzerias = online_shop.get_all_entries(context.bot_data['pizzerias_flow_name'])
         nearest_pizzeria = get_nearest_pizzeria(current_position, pizzerias)
         delivery_cost, message_text = get_delivery_cost_and_message_text(nearest_pizzeria)
+
         keyboard = get_delivery_buttons()
         reply_markup = InlineKeyboardMarkup(keyboard)
         update.message.reply_text(text=dedent(message_text), reply_markup=reply_markup)
@@ -257,46 +259,39 @@ def create_customer(update, context):
         context.chat_data['address_id'] = address_id
         context.chat_data['delivery_cost'] = delivery_cost
 
-    return 'END'
+    return 'HANDLE_NEW_ORDER'
 
 
-def save_customer_address(chat_id, current_position):
-    latitude, longitude = current_position
-    customer_address = {
-        'Customer_chat_id': chat_id,
-        'Longitude': longitude,
-        'Latitude': latitude
-    }
-    address_id = online_shop.create_flow_entry('Customer_Address', customer_address)
-    return address_id
+def handle_new_order(update, context):
+    """Хэндлер для состояния HANDLE_NEW_ORDER.
 
-
-def new_order(update, context):
-    """Хэндлер для состояния END.
-
-    Предлагает начать новый заказ.
+    Обрабатывает выбранный вариант доставки:
+        * при самовывозе заканчивает диалог
+        * при доставке отправляет сообщение доставщику о заказе и предлагает покупателю оплатить заказ
 
     Args:
         update (:class:`telegram.Update`): Incoming telegram update.
         context (:class:`telegram.ext.CallbackContext`): The context object passed to the callback.
 
     Returns:
-        str: состояние END
+        str: состояние HANDLE_WAITING_PAYMENT, HANDLE_NEW_ORDER или HANDLE_FINISH
     """
-    # message_text = 'Оформление заказа окончено. Чтобы начать новый заказ введите /start'
-    # TODO исправить название хендлера
     if update.message:
-        return 'END'
+        return 'HANDLE_NEW_ORDER'
     if update.callback_query:
         query = update.callback_query
         nearest_pizzeria = context.chat_data['nearest_pizzeria']
         if query.data == 'delivery':
             customer_address = online_shop.get_entry('Customer_Address', context.chat_data['address_id'])
             deliver_telegram_id = nearest_pizzeria['pizzeria']['Deliver_telegram_id']
-            # TODO добавить сообщение со стоимостью доставки
+
             query.bot.send_message(chat_id=deliver_telegram_id, text=context.chat_data['cart_text'])
+            delivery_cost = context.chat_data.setdefault('delivery_cost', 0)
+            if delivery_cost > 0:
+                query.bot.send_message(chat_id=deliver_telegram_id, text=f'Стоимость доставки {delivery_cost}')
             query.bot.send_location(chat_id=deliver_telegram_id, latitude=customer_address['Latitude'],
                                     longitude=customer_address['Longitude'])
+
             context.job_queue.run_once(get_feedback, 30, context=query.message.chat_id)
 
             keyboard = [[get_payment_button()]]
@@ -308,7 +303,7 @@ def new_order(update, context):
         elif query.data == 'pick-up':
             query.message.reply_text(text=f'Адрес ближайшей пиццерии {nearest_pizzeria["pizzeria"]["Address"]}')
 
-    return 'END'
+    return 'HANDLE_FINISH'
 
 
 def start_payment(update, context):
@@ -320,10 +315,10 @@ def start_payment(update, context):
         chat_id = query.message.chat_id
         title = 'Оплата заказа'
         description = 'Пицца'
-        payload = 'Custom-Payload'
-        provider_token = dispatcher.bot_data['bank_token']
+        payload = context.bot_data['payload_name']
+        provider_token = context.bot_data['bank_token']
         start_parameter = 'test-payment'
-        currency = 'RUB'
+        currency = context.bot_data['currency']
         prices = []
         products = online_shop.get_cart_items(query.message.chat.id)
         for product in products:
@@ -332,6 +327,7 @@ def start_payment(update, context):
         delivery_cost = context.chat_data.setdefault('delivery_cost', 0)
 
         if delivery_cost > 0:
+            # price * 100 so as to include 2 decimal points
             prices.append(LabeledPrice('Доставка', delivery_cost * 100))
 
         context.bot.send_invoice(chat_id, title, description, payload, provider_token, start_parameter, currency,
@@ -341,17 +337,18 @@ def start_payment(update, context):
 
 def precheckout_callback(update, context):
     query = update.pre_checkout_query
-    # check the payload, is this from your bot?
-    if query.invoice_payload != 'Custom-Payload':
-        # answer False pre_checkout_query
+    if query.invoice_payload != context.bot_data['payload_name']:
         query.answer(ok=False, error_message='Something went wrong...')
     else:
         query.answer(ok=True)
+        logger.info(f'Начало платы от пользователя {query["from_user"]["id"]} на сумму {query["total_amount"]}')
 
 
 def successful_payment_callback(update, context):
-    update.message.reply_text('Thank you for your payment!')
-    logger.info('Оплата прошла успешно')
+    payment = update.message.successful_payment
+    update.message.reply_text('Спасибо за покупку!')
+    logger.info(
+        f'Оплата от пользователя {update.message["from_user"]["id"]} на сумму {payment["total_amount"]} прошла успешно')
 
 
 def handle_finish(update, context):
@@ -414,10 +411,10 @@ def handle_users_reply(update, context):
         'HANDLE_MENU': handle_menu,
         'HANDLE_DESCRIPTION': handle_description,
         'HANDLE_CART_EDIT': handle_cart_edit,
-        'CREATE_CUSTOMER': create_customer,
-        'END': new_order,
+        'HANDLE_LOCATION': handle_location,
+        'HANDLE_NEW_ORDER': handle_new_order,
         'HANDLE_WAITING_PAYMENT': start_payment,
-        'FINISH': handle_finish
+        'HANDLE_FINISH': handle_finish
     }
     state_handler = states_functions[user_state]
     next_state = state_handler(update, context)
@@ -467,4 +464,8 @@ if __name__ == '__main__':
     dispatcher.bot_data['products_per_page_number'] = products_per_page_number
     dispatcher.bot_data['yandex_geocoder_token'] = os.environ['YANDEX_GEOCODER_TOKEN']
     dispatcher.bot_data['bank_token'] = os.environ['BANK_TOKEN']
+    dispatcher.bot_data['pizzerias_flow_name'] = 'Pizzeria'
+    dispatcher.bot_data['currency'] = 'RUB'
+    dispatcher.bot_data['payload_name'] = 'Custom-Payload'
+
     updater.start_polling()
