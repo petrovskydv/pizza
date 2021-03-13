@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from functools import wraps
 
@@ -6,8 +7,6 @@ import requests
 
 logger = logging.getLogger(__name__)
 _token = None
-_client_id = None
-_client_secret = None
 _headers = None
 
 
@@ -259,13 +258,11 @@ def create_customer(customer_name, customer_email):
     response.raise_for_status()
 
 
-def get_access_token(client_id=None, client_secret=None):
-    set_client_id(client_id)
-    set_client_secret(client_secret)
+def get_access_token():
     logger.info('Получаем токен')
     payload = {
-        'client_id': _client_id,
-        'client_secret': _client_secret,
+        'client_id': os.environ['STORE_CLIENT_ID'],
+        'client_secret': os.environ['STORE_CLIENT_SECRET'],
         'grant_type': 'client_credentials'
     }
 
@@ -282,19 +279,3 @@ def get_access_token(client_id=None, client_secret=None):
 def set_headers():
     global _headers
     _headers = {'Authorization': f'Bearer {_token["access_token"]}'}
-
-
-def set_client_id(client_id=None):
-    if client_id is None:
-        pass
-    else:
-        global _client_id
-        _client_id = client_id
-
-
-def set_client_secret(client_secret=None):
-    if client_secret is None:
-        pass
-    else:
-        global _client_secret
-        _client_secret = client_secret

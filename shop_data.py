@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 
 import requests
 import urllib3
@@ -105,7 +104,7 @@ def main():
     urllib3.disable_warnings()
     load_dotenv()
 
-    online_shop.get_access_token(os.environ['STORE_CLIENT_ID'], os.environ['STORE_CLIENT_SECRET'])
+    online_shop.get_access_token()
     online_shop.set_headers()
 
     products_json_file_path = 'menu.json'

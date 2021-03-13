@@ -332,7 +332,7 @@ def start_payment(update, context):
 
         context.bot.send_invoice(chat_id, title, description, payload, provider_token, start_parameter, currency,
                                  prices)
-        return 'FINISH'
+        return 'HANDLE_FINISH'
 
 
 def precheckout_callback(update, context):
@@ -359,7 +359,7 @@ def handle_finish(update, context):
     elif update.callback_query:
         message = update.callback_query.message
         message.reply_text(text=message_text)
-    return 'FINISH'
+    return 'HANDLE_FINISH'
 
 
 def get_feedback(context):
@@ -447,7 +447,7 @@ if __name__ == '__main__':
 
     load_dotenv()
 
-    online_shop.get_access_token(os.environ['STORE_CLIENT_ID'], os.environ['STORE_CLIENT_SECRET'])
+    online_shop.get_access_token()
     online_shop.set_headers()
 
     updater = Updater(os.environ['TELEGRAM_TOKEN'])
