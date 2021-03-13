@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import sys
 
 import requests
 import urllib3
@@ -32,11 +31,9 @@ def create_products(file_path):
             image_id = online_shop.create_file(image_file)
             online_shop.create_product_main_image(product_id, image_id)
         except requests.HTTPError as e:
-            print(e.response.text, file=sys.stderr)
-            logger.exception(e)
+            logger.exception(e.response.text)
         except requests.ConnectionError as e:
-            logger.exception(e)
-            print(e.response.text, file=sys.stderr)
+            logger.exception(e.response.text)
 
 
 def create_flow(flow, field_names, field_descriptions):
@@ -46,11 +43,9 @@ def create_flow(flow, field_names, field_descriptions):
             field = dict(zip(field_names, field_description))
             online_shop.create_flow_field(flow_id, field)
     except requests.HTTPError as e:
-        print(e.response.text, file=sys.stderr)
-        logger.exception(e)
+        logger.exception(e.response.text)
     except requests.ConnectionError as e:
-        logger.exception(e)
-        print(e.response.text, file=sys.stderr)
+        logger.exception(e.response.text)
 
 
 def fill_pizzeria_addresses(file_path):
@@ -65,11 +60,9 @@ def fill_pizzeria_addresses(file_path):
         try:
             online_shop.create_flow_entry('Pizzeria', fields)
         except requests.HTTPError as e:
-            print(e.response.text, file=sys.stderr)
-            logger.exception(e)
+            logger.exception(e.response.text)
         except requests.ConnectionError as e:
-            logger.exception(e)
-            print(e.response.text, file=sys.stderr)
+            logger.exception(e.response.text)
 
 
 def create_pizzerias(file_path):
