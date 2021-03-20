@@ -35,7 +35,7 @@ def get_all_products():
             'id': product['id'],
             'name': product['name'],
             'description': product['description'],
-            'price': product['price'][0]['amount']
+            'price': product['meta']['display_price']['with_tax']['formatted']
         }
         products_for_menu.append(product_for_menu)
     return products_for_menu
