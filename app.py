@@ -64,7 +64,31 @@ def send_keyboard(recipient_id):
     headers = {'Content-Type': 'application/json'}
 
     products = online_shop.get_all_products()
-    elements = []
+    logo_url = 'https://image.freepik.com/free-vector/pizza-logo-design-template_15146-192.jpg'
+    elements = [
+        {
+            'title': 'Меню',
+            'subtitle': 'Здесь вы можете выбрать один из вариантов',
+            'image_url': logo_url,
+            'buttons': [
+                {
+                    'type': 'postback',
+                    'title': 'Корзина',
+                    'payload': 'cart'
+                },
+                {
+                    'type': 'postback',
+                    'title': 'Акции',
+                    'payload': 'cart'
+                },
+                {
+                    'type': 'postback',
+                    'title': 'Сделать заказ',
+                    'payload': 'cart'
+                },
+            ]
+        }
+    ]
 
     for product_number in range(0, 5):
         product = products[product_number]
