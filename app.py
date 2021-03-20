@@ -63,7 +63,7 @@ def send_keyboard(recipient_id):
     params = {'access_token': os.environ['PAGE_ACCESS_TOKEN']}
     headers = {'Content-Type': 'application/json'}
 
-    products = online_shop.get_all_products()
+    products = online_shop.get_products_by_category_id('ab7dfb87-ba7a-4ea7-8733-c7bcc359ffac')
     logo_url = 'https://image.freepik.com/free-vector/pizza-logo-design-template_15146-192.jpg'
     elements = [
         {
@@ -79,19 +79,18 @@ def send_keyboard(recipient_id):
                 {
                     'type': 'postback',
                     'title': 'Акции',
-                    'payload': 'cart'
+                    'payload': 'promotions'
                 },
                 {
                     'type': 'postback',
                     'title': 'Сделать заказ',
-                    'payload': 'cart'
+                    'payload': 'make_order'
                 },
             ]
         }
     ]
 
-    for product_number in range(0, 5):
-        product = products[product_number]
+    for product in products:
         image_url = online_shop.get_file_href(product['image_id'])
         elements.append(
             {

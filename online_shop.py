@@ -52,6 +52,26 @@ def get_product(product_id):
 
 
 @validate_access_token
+def get_products_by_category_id(category_id):
+    logger.info(f'Получаем товар категории с id {category_id}')
+    response = requests.get(f'https://api.moltin.com/v2/products?filter=eq(category.id, {category_id})',
+                            headers=_headers)
+    response.raise_for_status()
+    review_result = response.json()
+    products_for_menu = []
+    for product in review_result['data']:
+        product_for_menu = {
+            'id': product['id'],
+            'name': product['name'],
+            'description': product['description'],
+            'price': product['meta']['display_price']['with_tax']['formatted'],
+            'image_id': product['relationships']['main_image']['data']['id']
+        }
+        products_for_menu.append(product_for_menu)
+    return products_for_menu
+
+
+@validate_access_token
 def create_product(product):
     logger.info(f'Создаем товар {product}')
 
