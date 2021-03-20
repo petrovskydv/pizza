@@ -39,7 +39,7 @@ def webhook():
                     recipient_id = messaging_event['recipient']['id']
                     message_text = messaging_event['message']['text']
                     send_message(sender_id, message_text)
-                    send_keyboard(sender_id, message_text)
+                    send_keyboard(sender_id)
     return 'ok', 200
 
 
@@ -68,10 +68,12 @@ def send_keyboard(recipient_id):
 
     for product_number in range(0, 5):
         product = products[product_number]
+        image_url = online_shop.get_file_href(product['image_id'])
         elements.append(
             {
                 'title': f'{product["name"]} ({product["price"]})',
                 'subtitle': product['description'],
+                'image_url': image_url,
                 'buttons': [
                     {
                         'type': 'postback',
@@ -91,6 +93,7 @@ def send_keyboard(recipient_id):
                 'type': 'template',
                 'payload': {
                     'template_type': 'generic',
+                    'image_aspect_ratio': 'square',
                     'elements': elements
                 }
             }
@@ -102,6 +105,7 @@ def send_keyboard(recipient_id):
 
 
 if __name__ == '__main__':
+    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
     load_dotenv()
     online_shop.get_access_token()
     online_shop.set_headers()

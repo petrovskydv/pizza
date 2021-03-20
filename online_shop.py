@@ -35,7 +35,8 @@ def get_all_products():
             'id': product['id'],
             'name': product['name'],
             'description': product['description'],
-            'price': product['meta']['display_price']['with_tax']['formatted']
+            'price': product['meta']['display_price']['with_tax']['formatted'],
+            'image_id': product['relationships']['main_image']['data']['id']
         }
         products_for_menu.append(product_for_menu)
     return products_for_menu
@@ -196,9 +197,9 @@ def get_entry(flow_slug, entry_id):
 
 
 @validate_access_token
-def get_file_href(product_id):
-    logger.info(f'Получаем ссылку основного изображения товара с id {product_id}')
-    response = requests.get(f'https://api.moltin.com/v2/files/{product_id}', headers=_headers)
+def get_file_href(file_id):
+    logger.info(f'Получаем ссылку основного изображения товара с id {file_id}')
+    response = requests.get(f'https://api.moltin.com/v2/files/{file_id}', headers=_headers)
     response.raise_for_status()
     review_result = response.json()
     return review_result['data']['link']['href']
