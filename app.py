@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+from pprint import pprint
+from traceback import print_exc
 
 import requests
 from dotenv import load_dotenv
@@ -40,8 +42,8 @@ def webhook():
                 if messaging_event.get('message'):
                     message_text = messaging_event['message']['text']
                 elif messaging_event.get('postback'):
-                    message_text = {'id': messaging_event['postback']['payload']}
-
+                    message_text = messaging_event['postback']['payload']
+                logger.info(f'Обрабатываем сообщение {message_text}')
                 handle_users_reply(sender_id, message_text)
     return 'ok', 200
 
@@ -50,29 +52,67 @@ def handle_users_reply(sender_id, message_text):
     db = get_database_connection()
     states_functions = {
         'START': handle_start,
+        'MENU': handle_menu,
     }
     chat_id_key = f'facebookid_{sender_id}'
     recorded_state = db.get(chat_id_key)
-    if not recorded_state or recorded_state.decode("utf-8") not in states_functions.keys():
-        user_state = "START"
+    if not recorded_state or recorded_state.decode('utf-8') not in states_functions.keys():
+        user_state = 'START'
     else:
-        user_state = recorded_state.decode("utf-8")
+        user_state = recorded_state.decode('utf-8')
 
-    if message_text == "/start":
-        user_state = "START"
+    if message_text == '/start':
+        user_state = 'START'
 
     state_handler = states_functions[user_state]
     next_state = state_handler(sender_id, message_text)
     db.set(chat_id_key, next_state)
 
 
-def handle_start(sender_id, message_text):
+def handle_menu(sender_id, message_text):
+    if message_text.startswith('category_'):
+        return handle_start(sender_id, message_text)
+
+    if message_text.startswith('product_'):
+        product_id = message_text.replace('product_', '')
+        cart_id = f'facebookid_{sender_id}'
+        logger.info(
+            f'Добавляем товар с id {product_id} в корзину {cart_id}')
+        online_shop.add_product_to_cart(cart_id, product_id, quantity=1)
+        product = online_shop.get_product(product_id)
+        send_message(sender_id, {'text': f'В корзину добавлена пицца {product["name"]}'})
+
+    if message_text == 'cart':
+        show_cart(sender_id, message_text)
+
+    return 'MENU'
+
+
+def send_message(recipient_id, message):
     params = {'access_token': os.environ['PAGE_ACCESS_TOKEN']}
     headers = {'Content-Type': 'application/json'}
-    if type(message_text)==dict:
-        front_page_category_id = message_text['id']
-    else:
+    request_content = json.dumps({
+        'recipient': {
+            'id': recipient_id
+        },
+        'message': message
+    })
+    try:
+        response = requests.post('https://graph.facebook.com/v2.6/me/messages', params=params, headers=headers,
+                                 data=request_content)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        print_exc()
+        print(e.response.text)
+
+
+def handle_start(sender_id, message_text):
+    if message_text == '/start':
         front_page_category_id = '40874a97-fdb2-452b-81a3-0dfb2dfeee1a'
+    elif message_text.startswith('category_'):
+        front_page_category_id = message_text.replace('category_', '')
+    else:
+        return 'START'
 
     products = online_shop.get_products_by_category_id(front_page_category_id)
     logo_url = 'https://image.freepik.com/free-vector/pizza-logo-design-template_15146-192.jpg'
@@ -112,7 +152,7 @@ def handle_start(sender_id, message_text):
                     {
                         'type': 'postback',
                         'title': 'добавить в корзину',
-                        'payload': product['id']
+                        'payload': f'product_{product["id"]}'
                     }
                 ]
             }
@@ -127,7 +167,7 @@ def handle_start(sender_id, message_text):
             {
                 'type': 'postback',
                 'title': category['name'],
-                'payload': category['id']
+                'payload': f'category_{category["id"]}'
             }
         )
 
@@ -141,26 +181,97 @@ def handle_start(sender_id, message_text):
         }
     )
 
-    request_content = json.dumps({
-        'recipient': {
-            'id': sender_id
-        },
-        'message': {
-            'attachment': {
-                'type': 'template',
-                'payload': {
-                    'template_type': 'generic',
-                    'image_aspect_ratio': 'square',
-                    'elements': elements
-                }
+    message = {
+        'attachment': {
+            'type': 'template',
+            'payload': {
+                'template_type': 'generic',
+                'image_aspect_ratio': 'square',
+                'elements': elements
             }
         }
-    })
+    }
+    send_message(sender_id, message)
+
+    return 'MENU'
+
+
+def show_cart(sender_id, message_text):
+    if message_text != 'cart':
+        return 'MENU'
+
+    cart_id = f'facebookid_{sender_id}'
+    cart = online_shop.get_cart(cart_id)
+    cart_products = online_shop.get_cart_items(cart_id)
+    cart_logo_url = 'https://postium.ru/wp-content/uploads/2018/08/idealnaya-korzina-internet-magazina-1068x713.jpg'
+    elements = [
+        {
+            'title': f"Ваш заказ на сумму {cart['data']['meta']['display_price']['with_tax']['formatted']}",
+            'subtitle': 'Здесь вы можете выбрать один из вариантов',
+            'image_url': cart_logo_url,
+            'buttons': [
+                {
+                    'type': 'postback',
+                    'title': 'Самовывоз',
+                    'payload': 'pick-up'
+                },
+                {
+                    'type': 'postback',
+                    'title': 'Доставка',
+                    'payload': 'delivery'
+                },
+                {
+                    'type': 'postback',
+                    'title': 'К меню',
+                    'payload': '/start'
+                },
+            ]
+        }
+    ]
+
+    for product in cart_products:
+        # image_url = online_shop.get_file_href(product['image_id'])
+        # pprint(product)
+        product_price = product['meta']['display_price']['with_tax']
+        elements.append(
+            {
+                'title': f'{product["name"]} - {product["quantity"]} шт.'
+                         f' на сумму {product_price["value"]["formatted"]}',
+                'subtitle': product['description'],
+                'image_url': product['image']['href'],
+                'buttons': [
+                    {
+                        'type': 'postback',
+                        'title': 'Добавить еще одну',
+                        'payload': f'add_product_{product["id"]}'
+                    },
+                    {
+                        'type': 'postback',
+                        'title': 'Убрать из корзины',
+                        'payload': f'delete_product_{product["id"]}'
+                    }
+                ]
+            }
+        )
+    message = {
+        'attachment': {
+            'type': 'template',
+            'payload': {
+                'template_type': 'generic',
+                'image_aspect_ratio': 'square',
+                'elements': elements
+            }
+        }
+    }
+    send_message(sender_id, message)
+
+    return 'CART'
+
+
+def send_request(headers, params, request_content):
     response = requests.post('https://graph.facebook.com/v2.6/me/messages', params=params, headers=headers,
                              data=request_content)
     response.raise_for_status()
-
-    return "START"
 
 
 if __name__ == '__main__':
