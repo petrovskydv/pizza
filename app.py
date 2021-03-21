@@ -5,7 +5,9 @@ import os
 import requests
 from dotenv import load_dotenv
 from flask import Flask, request
+
 import online_shop
+from utils import get_database_connection
 
 app = Flask(__name__)
 
@@ -39,8 +41,28 @@ def webhook():
                     recipient_id = messaging_event['recipient']['id']
                     message_text = messaging_event['message']['text']
                     send_message(sender_id, message_text)
-                    send_keyboard(sender_id)
+                    handle_users_reply(sender_id, message_text)
     return 'ok', 200
+
+
+def handle_users_reply(sender_id, message_text):
+    db = get_database_connection()
+    states_functions = {
+        'START': handle_start,
+    }
+    chat_id_key = f'facebookid_{sender_id}'
+    recorded_state = db.get(chat_id_key)
+    if not recorded_state or recorded_state.decode("utf-8") not in states_functions.keys():
+        user_state = "START"
+    else:
+        user_state = recorded_state.decode("utf-8")
+
+    if message_text == "/start":
+        user_state = "START"
+
+    state_handler = states_functions[user_state]
+    next_state = state_handler(sender_id, message_text)
+    db.set(chat_id_key, next_state)
 
 
 def send_message(recipient_id, message_text):
@@ -59,7 +81,7 @@ def send_message(recipient_id, message_text):
     response.raise_for_status()
 
 
-def send_keyboard(recipient_id):
+def handle_start(sender_id, message_text):
     params = {'access_token': os.environ['PAGE_ACCESS_TOKEN']}
     headers = {'Content-Type': 'application/json'}
 
@@ -133,7 +155,7 @@ def send_keyboard(recipient_id):
 
     request_content = json.dumps({
         'recipient': {
-            'id': recipient_id
+            'id': sender_id
         },
         'message': {
             'attachment': {
@@ -149,6 +171,8 @@ def send_keyboard(recipient_id):
     response = requests.post('https://graph.facebook.com/v2.6/me/messages', params=params, headers=headers,
                              data=request_content)
     response.raise_for_status()
+
+    return "START"
 
 
 if __name__ == '__main__':

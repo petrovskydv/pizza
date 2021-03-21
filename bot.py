@@ -2,7 +2,6 @@ import logging
 import os
 from textwrap import dedent
 
-import redis
 import telegram
 from dotenv import load_dotenv
 from more_itertools import chunked
@@ -14,8 +13,8 @@ import online_shop
 from keyboards import get_products_keyboard, get_purchase_options_keyboard, get_cart_button, get_menu_button, \
     get_text_and_buttons_for_cart, get_pagination_buttons, get_delivery_buttons, get_payment_button
 from utils import fetch_coordinates, get_nearest_pizzeria, get_delivery_cost_and_message_text, save_customer_address
+from utils import get_database_connection
 
-_database = None
 logger = logging.getLogger(__name__)
 
 
@@ -422,23 +421,6 @@ def handle_users_reply(update, context):
     state_handler = states_functions[user_state]
     next_state = state_handler(update, context)
     db.set(chat_id_key, next_state)
-
-
-def get_database_connection():
-    """Соединение с базой банных.
-
-    Возвращает конекшн с базой данных Redis, либо создаёт новый, если он ещё не создан.
-
-    Returns:
-        (:class:`redis.Redis`): Redis client object
-    """
-    global _database
-    if _database is None:
-        database_password = os.environ['REDIS_PASSWORD']
-        database_host = os.environ['REDIS_HOST']
-        database_port = os.environ['REDIS_PORT']
-        _database = redis.Redis(host=database_host, port=database_port, password=database_password)
-    return _database
 
 
 def handle_error(update, context):
