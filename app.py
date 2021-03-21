@@ -36,12 +36,13 @@ def webhook():
     if data['object'] == 'page':
         for entry in data['entry']:
             for messaging_event in entry['messaging']:
+                sender_id = messaging_event['sender']['id']
                 if messaging_event.get('message'):
-                    sender_id = messaging_event['sender']['id']
-                    recipient_id = messaging_event['recipient']['id']
                     message_text = messaging_event['message']['text']
-                    send_message(sender_id, message_text)
-                    handle_users_reply(sender_id, message_text)
+                elif messaging_event.get('postback'):
+                    message_text = {'id': messaging_event['postback']['payload']}
+
+                handle_users_reply(sender_id, message_text)
     return 'ok', 200
 
 
@@ -65,27 +66,14 @@ def handle_users_reply(sender_id, message_text):
     db.set(chat_id_key, next_state)
 
 
-def send_message(recipient_id, message_text):
-    params = {'access_token': os.environ['PAGE_ACCESS_TOKEN']}
-    headers = {'Content-Type': 'application/json'}
-    request_content = json.dumps({
-        'recipient': {
-            'id': recipient_id
-        },
-        'message': {
-            'text': message_text
-        }
-    })
-    response = requests.post('https://graph.facebook.com/v2.6/me/messages', params=params, headers=headers,
-                             data=request_content)
-    response.raise_for_status()
-
-
 def handle_start(sender_id, message_text):
     params = {'access_token': os.environ['PAGE_ACCESS_TOKEN']}
     headers = {'Content-Type': 'application/json'}
+    if type(message_text)==dict:
+        front_page_category_id = message_text['id']
+    else:
+        front_page_category_id = '40874a97-fdb2-452b-81a3-0dfb2dfeee1a'
 
-    front_page_category_id = '40874a97-fdb2-452b-81a3-0dfb2dfeee1a'
     products = online_shop.get_products_by_category_id(front_page_category_id)
     logo_url = 'https://image.freepik.com/free-vector/pizza-logo-design-template_15146-192.jpg'
     elements = [
