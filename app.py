@@ -11,9 +11,8 @@ from flask import Flask, request
 import online_shop
 from utils import get_database_connection
 
+logger = logging.getLogger('facebook_bot')
 app = Flask(__name__)
-
-logger = logging.getLogger(__name__)
 
 
 @app.route('/', methods=['GET'])
@@ -54,8 +53,9 @@ def handle_users_reply(sender_id, message_text):
         'START': handle_start,
         'MENU': handle_menu,
     }
-    chat_id_key = f'facebookid_{sender_id}'
+    chat_id_key = get_cart_id(sender_id)
     recorded_state = db.get(chat_id_key)
+    logger.info(f'Прочитали текущее состояние из БД: {recorded_state}')
     if not recorded_state or recorded_state.decode('utf-8') not in states_functions.keys():
         user_state = 'START'
     else:
@@ -67,6 +67,7 @@ def handle_users_reply(sender_id, message_text):
     state_handler = states_functions[user_state]
     next_state = state_handler(sender_id, message_text)
     db.set(chat_id_key, next_state)
+    logger.info(f'Записали состояние в БД: {next_state}')
 
 
 def handle_menu(sender_id, message_text):
@@ -75,17 +76,31 @@ def handle_menu(sender_id, message_text):
 
     if message_text.startswith('product_'):
         product_id = message_text.replace('product_', '')
-        cart_id = f'facebookid_{sender_id}'
+        cart_id = get_cart_id(sender_id)
         logger.info(
             f'Добавляем товар с id {product_id} в корзину {cart_id}')
         online_shop.add_product_to_cart(cart_id, product_id, quantity=1)
         product = online_shop.get_product(product_id)
         send_message(sender_id, {'text': f'В корзину добавлена пицца {product["name"]}'})
+        show_cart(sender_id, 'cart')
+
+    if message_text.startswith('delete_product_'):
+        product_id = message_text.replace('delete_product_', '')
+        cart_id = get_cart_id(sender_id)
+        logger.info(
+            f'Удаляем товар с id {product_id} из корзины {cart_id}')
+        online_shop.remove_product_from_cart(cart_id, product_id)
+        send_message(sender_id, {'text': 'Пицца удалена из корзины'})
+        show_cart(sender_id, 'cart')
 
     if message_text == 'cart':
         show_cart(sender_id, message_text)
 
     return 'MENU'
+
+
+def get_cart_id(sender_id):
+    return f'facebookid_{sender_id}'
 
 
 def send_message(recipient_id, message):
@@ -103,7 +118,7 @@ def send_message(recipient_id, message):
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         print_exc()
-        print(e.response.text)
+        logger.info(e.response.text)
 
 
 def handle_start(sender_id, message_text):
@@ -200,7 +215,7 @@ def show_cart(sender_id, message_text):
     if message_text != 'cart':
         return 'MENU'
 
-    cart_id = f'facebookid_{sender_id}'
+    cart_id = get_cart_id(sender_id)
     cart = online_shop.get_cart(cart_id)
     cart_products = online_shop.get_cart_items(cart_id)
     cart_logo_url = 'https://postium.ru/wp-content/uploads/2018/08/idealnaya-korzina-internet-magazina-1068x713.jpg'
@@ -230,8 +245,6 @@ def show_cart(sender_id, message_text):
     ]
 
     for product in cart_products:
-        # image_url = online_shop.get_file_href(product['image_id'])
-        # pprint(product)
         product_price = product['meta']['display_price']['with_tax']
         elements.append(
             {
@@ -243,7 +256,7 @@ def show_cart(sender_id, message_text):
                     {
                         'type': 'postback',
                         'title': 'Добавить еще одну',
-                        'payload': f'add_product_{product["id"]}'
+                        'payload': f'product_{product["product_id"]}'
                     },
                     {
                         'type': 'postback',
@@ -276,6 +289,7 @@ def send_request(headers, params, request_content):
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+    logger.info('Запуск')
     load_dotenv()
     online_shop.get_access_token()
     online_shop.set_headers()
