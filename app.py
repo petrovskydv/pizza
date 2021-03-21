@@ -63,7 +63,8 @@ def send_keyboard(recipient_id):
     params = {'access_token': os.environ['PAGE_ACCESS_TOKEN']}
     headers = {'Content-Type': 'application/json'}
 
-    products = online_shop.get_products_by_category_id('ab7dfb87-ba7a-4ea7-8733-c7bcc359ffac')
+    front_page_category_id = '40874a97-fdb2-452b-81a3-0dfb2dfeee1a'
+    products = online_shop.get_products_by_category_id(front_page_category_id)
     logo_url = 'https://image.freepik.com/free-vector/pizza-logo-design-template_15146-192.jpg'
     elements = [
         {
@@ -106,6 +107,29 @@ def send_keyboard(recipient_id):
                 ]
             }
         )
+
+    category_buttons = []
+    categories = online_shop.get_all_categories()
+    for category in categories:
+        if category['id'] == front_page_category_id:
+            continue
+        category_buttons.append(
+            {
+                'type': 'postback',
+                'title': category['name'],
+                'payload': category['id']
+            }
+        )
+
+    categories_image_url = 'https://primepizza.ru/uploads/position/large_0c07c6fd5c4dcadddaf4a2f1a2c218760b20c396.jpg'
+    elements.append(
+        {
+            'title': 'Не нашли нужную пиццу?',
+            'subtitle': 'Остальные пиццы можно посмотреть в одной и категорий',
+            'image_url': categories_image_url,
+            'buttons': category_buttons
+        }
+    )
 
     request_content = json.dumps({
         'recipient': {

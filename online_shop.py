@@ -59,6 +59,7 @@ def get_products_by_category_id(category_id):
     response.raise_for_status()
     review_result = response.json()
     products_for_menu = []
+    # TODO убрать копипасту
     for product in review_result['data']:
         product_for_menu = {
             'id': product['id'],
@@ -69,6 +70,15 @@ def get_products_by_category_id(category_id):
         }
         products_for_menu.append(product_for_menu)
     return products_for_menu
+
+
+@validate_access_token
+def get_all_categories():
+    logger.info('Получаем категории')
+    response = requests.get('https://api.moltin.com/v2/categories', headers=_headers)
+    response.raise_for_status()
+    review_result = response.json()
+    return review_result['data']
 
 
 @validate_access_token
