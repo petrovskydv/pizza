@@ -401,10 +401,13 @@ def handle_users_reply(update, context):
         chat_id = update.callback_query.message.chat_id
     else:
         return
+
+    chat_id_key = f'telegramid_{chat_id}'
+
     if user_reply == '/start':
         user_state = 'START'
     else:
-        user_state = db.get(chat_id).decode('utf-8')
+        user_state = db.get(chat_id_key).decode('utf-8')
 
     states_functions = {
         'START': start,
@@ -418,7 +421,7 @@ def handle_users_reply(update, context):
     }
     state_handler = states_functions[user_state]
     next_state = state_handler(update, context)
-    db.set(chat_id, next_state)
+    db.set(chat_id_key, next_state)
 
 
 def get_database_connection():
