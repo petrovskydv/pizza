@@ -3,6 +3,7 @@ import logging
 import os
 from pprint import pprint
 from traceback import print_exc
+import menu_cache
 
 import requests
 from dotenv import load_dotenv
@@ -104,6 +105,7 @@ def get_cart_id(sender_id):
 
 
 def send_message(recipient_id, message):
+    logger.info(f'Отправляем сообщение в чат адресату с id {recipient_id}')
     params = {'access_token': os.environ['PAGE_ACCESS_TOKEN']}
     headers = {'Content-Type': 'application/json'}
     request_content = json.dumps({
@@ -128,8 +130,14 @@ def handle_start(sender_id, message_text):
         front_page_category_id = message_text.replace('category_', '')
     else:
         return 'START'
+    db = get_database_connection()
 
-    products = online_shop.get_products_by_category_id(front_page_category_id)
+    # logger.info('Читаем товары из кеша')
+    # all_products = json.loads(db.get('all_products'))
+
+    # products = online_shop.get_products_by_category_id(front_page_category_id)
+    logger.info(f'Читаем из кеша товары категории с id {front_page_category_id}')
+    category_products = json.loads(db.get(front_page_category_id))
     logo_url = 'https://image.freepik.com/free-vector/pizza-logo-design-template_15146-192.jpg'
     elements = [
         {
@@ -156,8 +164,10 @@ def handle_start(sender_id, message_text):
         }
     ]
 
-    for product in products:
-        image_url = online_shop.get_file_href(product['image_id'])
+    for product in category_products:
+        # image_url = online_shop.get_file_href(product['image_id'])
+        logger.info(f'Читаем из кеша ссылку на картинку для товара с id {product["id"]}')
+        image_url = db.get(product['id']).decode('utf-8')
         elements.append(
             {
                 'title': f'{product["name"]} ({product["price"]})',
@@ -174,7 +184,9 @@ def handle_start(sender_id, message_text):
         )
 
     category_buttons = []
-    categories = online_shop.get_all_categories()
+    # categories = online_shop.get_all_categories()
+    logger.info('Читаем категории из кеша')
+    categories = json.loads(db.get('categories'))
     for category in categories:
         if category['id'] == front_page_category_id:
             continue
@@ -293,4 +305,7 @@ if __name__ == '__main__':
     load_dotenv()
     online_shop.get_access_token()
     online_shop.set_headers()
+    # menu_cache.save_menu()
+    # menu = menu_cache.get_menu()
+
     app.run(debug=True)
