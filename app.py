@@ -33,7 +33,7 @@ def verify():
 @app.route('/', methods=['POST'])
 def webhook():
     """
-    Основной вебхук, на который будут приходить сообщения от Facebook.
+    Основной вебхук, на который будут приходить сообщения от Facebook и онлайн-магазина.
     """
     data = request.get_json()
     if data.get('object') and data['object'] == 'page':
@@ -82,9 +82,16 @@ def handle_users_reply(sender_id, message_text):
         user_state = 'START'
 
     state_handler = states_functions[user_state]
-    next_state = state_handler(sender_id, message_text)
-    db.set(chat_id_key, next_state)
-    logger.info(f'Записали состояние в БД: {next_state}')
+    try:
+        next_state = state_handler(sender_id, message_text)
+        db.set(chat_id_key, next_state)
+        logger.info(f'Записали состояние в БД: {next_state}')
+    except requests.HTTPError as e:
+        print_exc()
+        logger.error(e.response.text)
+    except requests.ConnectionError as e:
+        print_exc()
+        logger.exception(e)
 
 
 def handle_menu(sender_id, message_text):
@@ -97,8 +104,7 @@ def handle_menu(sender_id, message_text):
         product_id = message_text.replace('product_', '')
         logger.info(f'Добавляем товар с id {product_id} в корзину {cart_id}')
         online_shop.add_product_to_cart(cart_id, product_id, quantity=1)
-        # TODO взять данные из кеша
-        # product = online_shop.get_product(product_id)
+
         product = json.loads(db.get(product_id))['product']
         send_message(sender_id, {'text': f'В корзину добавлена пицца {product["name"]}'})
 
@@ -125,15 +131,10 @@ def send_message(recipient_id, message):
         },
         'message': message
     })
-    try:
-        response = requests.post('https://graph.facebook.com/v2.6/me/messages', params=params, headers=headers,
-                                 data=request_content)
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        # TODO добавить обработку остальных исключений и перенести их в handle_users_reply
-        #  чтобы ловить исключения при обращении к магазину
-        print_exc()
-        logger.error(e.response.text)
+
+    response = requests.post('https://graph.facebook.com/v2.6/me/messages', params=params, headers=headers,
+                             data=request_content)
+    response.raise_for_status()
 
 
 def handle_start(sender_id, message_text):
