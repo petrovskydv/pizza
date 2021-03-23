@@ -106,3 +106,7 @@ def get_database_connection():
         database_port = os.environ['REDIS_PORT']
         _database = redis.Redis(host=database_host, port=database_port, password=database_password)
     return _database
+
+
+def get_facebook_cart_id(sender_id):
+    return f'facebookid_{sender_id}'

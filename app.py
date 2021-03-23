@@ -1,16 +1,16 @@
 import json
 import logging
 import os
-from pprint import pprint
 from traceback import print_exc
-import menu_cache
 
 import requests
 from dotenv import load_dotenv
 from flask import Flask, request
 
 import online_shop
-from utils import get_database_connection
+from facebook_menu import get_categories_card, get_product_card, get_menu_card, get_cart_product_card, get_cart_card, \
+    get_generic_template_message
+from utils import get_database_connection, get_facebook_cart_id
 
 logger = logging.getLogger('facebook_bot')
 app = Flask(__name__)
@@ -43,6 +43,8 @@ def webhook():
                     message_text = messaging_event['message']['text']
                 elif messaging_event.get('postback'):
                     message_text = messaging_event['postback']['payload']
+                else:
+                    return
                 logger.info(f'Обрабатываем сообщение {message_text}')
                 handle_users_reply(sender_id, message_text)
     return 'ok', 200
@@ -50,13 +52,16 @@ def webhook():
 
 def handle_users_reply(sender_id, message_text):
     db = get_database_connection()
+
     states_functions = {
         'START': handle_start,
         'MENU': handle_menu,
     }
-    chat_id_key = get_cart_id(sender_id)
+
+    chat_id_key = get_facebook_cart_id(sender_id)
     recorded_state = db.get(chat_id_key)
     logger.info(f'Прочитали текущее состояние из БД: {recorded_state}')
+
     if not recorded_state or recorded_state.decode('utf-8') not in states_functions.keys():
         user_state = 'START'
     else:
@@ -72,24 +77,24 @@ def handle_users_reply(sender_id, message_text):
 
 
 def handle_menu(sender_id, message_text):
+    cart_id = get_facebook_cart_id(sender_id)
     if message_text.startswith('category_'):
         return handle_start(sender_id, message_text)
 
     if message_text.startswith('product_'):
+        db = get_database_connection()
         product_id = message_text.replace('product_', '')
-        cart_id = get_cart_id(sender_id)
-        logger.info(
-            f'Добавляем товар с id {product_id} в корзину {cart_id}')
+        logger.info(f'Добавляем товар с id {product_id} в корзину {cart_id}')
         online_shop.add_product_to_cart(cart_id, product_id, quantity=1)
-        product = online_shop.get_product(product_id)
+        # TODO взять данные из кеша
+        # product = online_shop.get_product(product_id)
+        product = json.loads(db.get(product_id))['product']
         send_message(sender_id, {'text': f'В корзину добавлена пицца {product["name"]}'})
         show_cart(sender_id, 'cart')
 
     if message_text.startswith('delete_product_'):
         product_id = message_text.replace('delete_product_', '')
-        cart_id = get_cart_id(sender_id)
-        logger.info(
-            f'Удаляем товар с id {product_id} из корзины {cart_id}')
+        logger.info(f'Удаляем товар с id {product_id} из корзины {cart_id}')
         online_shop.remove_product_from_cart(cart_id, product_id)
         send_message(sender_id, {'text': 'Пицца удалена из корзины'})
         show_cart(sender_id, 'cart')
@@ -98,10 +103,6 @@ def handle_menu(sender_id, message_text):
         show_cart(sender_id, message_text)
 
     return 'MENU'
-
-
-def get_cart_id(sender_id):
-    return f'facebookid_{sender_id}'
 
 
 def send_message(recipient_id, message):
@@ -119,105 +120,47 @@ def send_message(recipient_id, message):
                                  data=request_content)
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
+        # TODO добавить обработку остальных исключений и перенести их в handle_users_reply
+        #  чтобы ловить исключения при обращении к магазину
         print_exc()
-        logger.info(e.response.text)
+        logger.error(e.response.text)
 
 
 def handle_start(sender_id, message_text):
     if message_text == '/start':
-        front_page_category_id = '40874a97-fdb2-452b-81a3-0dfb2dfeee1a'
+        # TODO начальную категорию вынести в переменные
+        # front_page_category_id = '40874a97-fdb2-452b-81a3-0dfb2dfeee1a'
+        front_page_category_id = os.environ['FRONT_PAGE_CATEGORY_ID']
     elif message_text.startswith('category_'):
         front_page_category_id = message_text.replace('category_', '')
     else:
         return 'START'
     db = get_database_connection()
 
-    # logger.info('Читаем товары из кеша')
-    # all_products = json.loads(db.get('all_products'))
-
-    # products = online_shop.get_products_by_category_id(front_page_category_id)
     logger.info(f'Читаем из кеша товары категории с id {front_page_category_id}')
     category_products = json.loads(db.get(front_page_category_id))
-    logo_url = 'https://image.freepik.com/free-vector/pizza-logo-design-template_15146-192.jpg'
-    elements = [
-        {
-            'title': 'Меню',
-            'subtitle': 'Здесь вы можете выбрать один из вариантов',
-            'image_url': logo_url,
-            'buttons': [
-                {
-                    'type': 'postback',
-                    'title': 'Корзина',
-                    'payload': 'cart'
-                },
-                {
-                    'type': 'postback',
-                    'title': 'Акции',
-                    'payload': 'promotions'
-                },
-                {
-                    'type': 'postback',
-                    'title': 'Сделать заказ',
-                    'payload': 'make_order'
-                },
-            ]
-        }
-    ]
+    # TODO лого пиццерии в переменные
+    # pizzeria_logo_url = 'https://image.freepik.com/free-vector/pizza-logo-design-template_15146-192.jpg'
+    pizzeria_logo_url = os.environ['PIZZERIA_LOGO_URL']
+    elements = [get_menu_card(pizzeria_logo_url)]
 
     for product in category_products:
-        # image_url = online_shop.get_file_href(product['image_id'])
         logger.info(f'Читаем из кеша ссылку на картинку для товара с id {product["id"]}')
-        image_url = db.get(product['id']).decode('utf-8')
+        product_image_url = json.loads(db.get(product['id']))['image_url']
         elements.append(
-            {
-                'title': f'{product["name"]} ({product["price"]})',
-                'subtitle': product['description'],
-                'image_url': image_url,
-                'buttons': [
-                    {
-                        'type': 'postback',
-                        'title': 'добавить в корзину',
-                        'payload': f'product_{product["id"]}'
-                    }
-                ]
-            }
+            get_product_card(product, product_image_url)
         )
 
-    category_buttons = []
-    # categories = online_shop.get_all_categories()
     logger.info('Читаем категории из кеша')
     categories = json.loads(db.get('categories'))
-    for category in categories:
-        if category['id'] == front_page_category_id:
-            continue
-        category_buttons.append(
-            {
-                'type': 'postback',
-                'title': category['name'],
-                'payload': f'category_{category["id"]}'
-            }
-        )
-
-    categories_image_url = 'https://primepizza.ru/uploads/position/large_0c07c6fd5c4dcadddaf4a2f1a2c218760b20c396.jpg'
+    # TODO картинку категорий вынести в переменные
+    # categories_image_url = 'https://primepizza.ru/uploads/position/large_0c07c6fd5c4dcadddaf4a2f1a2c218760b20c396.jpg'
+    categories_image_url = os.environ['CATEGORIES_IMAGE_URL']
     elements.append(
-        {
-            'title': 'Не нашли нужную пиццу?',
-            'subtitle': 'Остальные пиццы можно посмотреть в одной и категорий',
-            'image_url': categories_image_url,
-            'buttons': category_buttons
-        }
+        get_categories_card(categories_image_url, categories, front_page_category_id)
     )
 
-    message = {
-        'attachment': {
-            'type': 'template',
-            'payload': {
-                'template_type': 'generic',
-                'image_aspect_ratio': 'square',
-                'elements': elements
-            }
-        }
-    }
+    message = get_generic_template_message(elements)
     send_message(sender_id, message)
 
     return 'MENU'
@@ -227,85 +170,33 @@ def show_cart(sender_id, message_text):
     if message_text != 'cart':
         return 'MENU'
 
-    cart_id = get_cart_id(sender_id)
+    cart_id = get_facebook_cart_id(sender_id)
     cart = online_shop.get_cart(cart_id)
     cart_products = online_shop.get_cart_items(cart_id)
-    cart_logo_url = 'https://postium.ru/wp-content/uploads/2018/08/idealnaya-korzina-internet-magazina-1068x713.jpg'
-    elements = [
-        {
-            'title': f"Ваш заказ на сумму {cart['data']['meta']['display_price']['with_tax']['formatted']}",
-            'subtitle': 'Здесь вы можете выбрать один из вариантов',
-            'image_url': cart_logo_url,
-            'buttons': [
-                {
-                    'type': 'postback',
-                    'title': 'Самовывоз',
-                    'payload': 'pick-up'
-                },
-                {
-                    'type': 'postback',
-                    'title': 'Доставка',
-                    'payload': 'delivery'
-                },
-                {
-                    'type': 'postback',
-                    'title': 'К меню',
-                    'payload': '/start'
-                },
-            ]
-        }
-    ]
+    # TODO картинку корзины вынести в переменные
+    # cart_logo_url = 'https://postium.ru/wp-content/uploads/2018/08/idealnaya-korzina-internet-magazina-1068x713.jpg'
+    cart_logo_url = os.environ['CART_LOGO_URL']
+    elements = [get_cart_card(cart, cart_logo_url)]
 
     for product in cart_products:
-        product_price = product['meta']['display_price']['with_tax']
         elements.append(
-            {
-                'title': f'{product["name"]} - {product["quantity"]} шт.'
-                         f' на сумму {product_price["value"]["formatted"]}',
-                'subtitle': product['description'],
-                'image_url': product['image']['href'],
-                'buttons': [
-                    {
-                        'type': 'postback',
-                        'title': 'Добавить еще одну',
-                        'payload': f'product_{product["product_id"]}'
-                    },
-                    {
-                        'type': 'postback',
-                        'title': 'Убрать из корзины',
-                        'payload': f'delete_product_{product["id"]}'
-                    }
-                ]
-            }
+            get_cart_product_card(product)
         )
-    message = {
-        'attachment': {
-            'type': 'template',
-            'payload': {
-                'template_type': 'generic',
-                'image_aspect_ratio': 'square',
-                'elements': elements
-            }
-        }
-    }
+
+    message = get_generic_template_message(elements)
     send_message(sender_id, message)
 
-    return 'CART'
+    return 'MENU'
 
 
-def send_request(headers, params, request_content):
-    response = requests.post('https://graph.facebook.com/v2.6/me/messages', params=params, headers=headers,
-                             data=request_content)
-    response.raise_for_status()
-
-
-if __name__ == '__main__':
+def main():
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
     logger.info('Запуск')
     load_dotenv()
     online_shop.get_access_token()
     online_shop.set_headers()
-    # menu_cache.save_menu()
-    # menu = menu_cache.get_menu()
-
     app.run(debug=True)
+
+
+if __name__ == '__main__':
+    main()

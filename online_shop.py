@@ -29,16 +29,18 @@ def get_all_products():
     response = requests.get('https://api.moltin.com/v2/products', headers=_headers)
     response.raise_for_status()
     review_result = response.json()
-    products_for_menu = []
-    for product in review_result['data']:
-        product_for_menu = {
-            'id': product['id'],
-            'name': product['name'],
-            'description': product['description'],
-            'price': product['meta']['display_price']['with_tax']['formatted'],
-            'image_id': product['relationships']['main_image']['data']['id']
-        }
-        products_for_menu.append(product_for_menu)
+    products_for_menu = get_products_for_menu(review_result)
+    return products_for_menu
+
+
+@validate_access_token
+def get_products_by_category_id(category_id):
+    logger.info(f'Получаем товар категории с id {category_id}')
+    response = requests.get(f'https://api.moltin.com/v2/products?filter=eq(category.id, {category_id})',
+                            headers=_headers)
+    response.raise_for_status()
+    review_result = response.json()
+    products_for_menu = get_products_for_menu(review_result)
     return products_for_menu
 
 
@@ -51,15 +53,8 @@ def get_product(product_id):
     return review_result['data']
 
 
-@validate_access_token
-def get_products_by_category_id(category_id):
-    logger.info(f'Получаем товар категории с id {category_id}')
-    response = requests.get(f'https://api.moltin.com/v2/products?filter=eq(category.id, {category_id})',
-                            headers=_headers)
-    response.raise_for_status()
-    review_result = response.json()
+def get_products_for_menu(review_result):
     products_for_menu = []
-    # TODO убрать копипасту
     for product in review_result['data']:
         product_for_menu = {
             'id': product['id'],

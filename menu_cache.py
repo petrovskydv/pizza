@@ -22,7 +22,15 @@ def save_menu():
     for product in all_products:
         image_url = online_shop.get_file_href(product['image_id'])
         logger.info(f'Сохраняем ссылку на изображение товара {product["name"]} в кеш')
-        db.set(product['id'], image_url)
+        db.set(
+            product['id'],
+            json.dumps(
+                {
+                    'image_url': image_url,
+                    'product': product
+                }
+            )
+        )
 
     print(db.get('b4bdb37b-09db-463e-9b69-40ca4fc228cc'))
 
