@@ -136,14 +136,11 @@ def handle_start(sender_id, message_text):
     else:
         return 'START'
     db = get_database_connection()
-
-    logger.info(f'Читаем из кеша товары категории с id {front_page_category_id}')
-    category_products = json.loads(db.get(front_page_category_id))
     # TODO лого пиццерии в переменные
     # pizzeria_logo_url = 'https://image.freepik.com/free-vector/pizza-logo-design-template_15146-192.jpg'
-    pizzeria_logo_url = os.environ['PIZZERIA_LOGO_URL']
-    elements = [get_menu_card(pizzeria_logo_url)]
-
+    elements = [get_menu_card()]
+    logger.info(f'Читаем из кеша товары категории с id {front_page_category_id}')
+    category_products = json.loads(db.get(front_page_category_id))
     for product in category_products:
         logger.info(f'Читаем из кеша ссылку на картинку для товара с id {product["id"]}')
         product_image_url = json.loads(db.get(product['id']))['image_url']
@@ -155,9 +152,8 @@ def handle_start(sender_id, message_text):
     categories = json.loads(db.get('categories'))
     # TODO картинку категорий вынести в переменные
     # categories_image_url = 'https://primepizza.ru/uploads/position/large_0c07c6fd5c4dcadddaf4a2f1a2c218760b20c396.jpg'
-    categories_image_url = os.environ['CATEGORIES_IMAGE_URL']
     elements.append(
-        get_categories_card(categories_image_url, categories, front_page_category_id)
+        get_categories_card(categories, front_page_category_id)
     )
 
     message = get_generic_template_message(elements)
@@ -175,8 +171,7 @@ def show_cart(sender_id, message_text):
     cart_products = online_shop.get_cart_items(cart_id)
     # TODO картинку корзины вынести в переменные
     # cart_logo_url = 'https://postium.ru/wp-content/uploads/2018/08/idealnaya-korzina-internet-magazina-1068x713.jpg'
-    cart_logo_url = os.environ['CART_LOGO_URL']
-    elements = [get_cart_card(cart, cart_logo_url)]
+    elements = [get_cart_card(cart)]
 
     for product in cart_products:
         elements.append(

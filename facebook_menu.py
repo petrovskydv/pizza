@@ -1,4 +1,8 @@
-def get_categories_card(categories_image_url, categories, front_page_category_id):
+import os
+
+
+def get_categories_card(categories, front_page_category_id):
+    categories_image_url = os.environ['CATEGORIES_IMAGE_URL']
     category_buttons = []
     for category in categories:
         if category['id'] == front_page_category_id:
@@ -33,11 +37,12 @@ def get_product_card(product, product_image_url):
     }
 
 
-def get_menu_card(logo_url):
+def get_menu_card():
+    pizzeria_logo_url = os.environ['PIZZERIA_LOGO_URL']
     return {
         'title': 'Меню',
         'subtitle': 'Здесь вы можете выбрать один из вариантов',
-        'image_url': logo_url,
+        'image_url': pizzeria_logo_url,
         'buttons': [
             {
                 'type': 'postback',
@@ -80,7 +85,8 @@ def get_cart_product_card(product):
     }
 
 
-def get_cart_card(cart, cart_logo_url):
+def get_cart_card(cart):
+    cart_logo_url = os.environ['CART_LOGO_URL']
     return {
         'title': f"Ваш заказ на сумму {cart['data']['meta']['display_price']['with_tax']['formatted']}",
         'subtitle': 'Здесь вы можете выбрать один из вариантов',
