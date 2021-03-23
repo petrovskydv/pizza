@@ -7,17 +7,8 @@ from utils import get_database_connection
 logger = logging.getLogger(__name__)
 
 
-def save_menu():
+def save_products():
     db = get_database_connection()
-    categories = online_shop.get_all_categories()
-    logger.info('Сохраняем список категорий в кеш')
-    db.set('categories', json.dumps(categories))
-
-    for category in categories:
-        products = online_shop.get_products_by_category_id(category['id'])
-        logger.info(f'Сохраняем товары категории {category["name"]} в кеш')
-        db.set(category['id'], json.dumps(products))
-
     all_products = online_shop.get_all_products()
     for product in all_products:
         image_url = online_shop.get_file_href(product['image_id'])
@@ -32,7 +23,16 @@ def save_menu():
             )
         )
 
-    print(db.get('b4bdb37b-09db-463e-9b69-40ca4fc228cc'))
+
+def save_categories():
+    db = get_database_connection()
+    categories = online_shop.get_all_categories()
+    logger.info('Сохраняем список категорий в кеш')
+    db.set('categories', json.dumps(categories))
+    for category in categories:
+        products = online_shop.get_products_by_category_id(category['id'])
+        logger.info(f'Сохраняем товары категории {category["name"]} в кеш')
+        db.set(category['id'], json.dumps(products))
 
 
 def get_menu():

@@ -6,6 +6,7 @@ from traceback import print_exc
 import requests
 from dotenv import load_dotenv
 from flask import Flask, request
+import menu_cache
 
 import online_shop
 from facebook_menu import get_categories_card, get_product_card, get_menu_card, get_cart_product_card, get_cart_card, \
@@ -35,7 +36,7 @@ def webhook():
     Основной вебхук, на который будут приходить сообщения от Facebook.
     """
     data = request.get_json()
-    if data['object'] == 'page':
+    if data.get('object') and data['object'] == 'page':
         for entry in data['entry']:
             for messaging_event in entry['messaging']:
                 sender_id = messaging_event['sender']['id']
@@ -47,6 +48,16 @@ def webhook():
                     return
                 logger.info(f'Обрабатываем сообщение {message_text}')
                 handle_users_reply(sender_id, message_text)
+    if data.get('configuration'):
+        if not data['configuration']['secret_key'] == os.environ['VERIFY_TOKEN']:
+            return 'Verification token mismatch', 403
+        if data['payload']['data']['type'] == 'product':
+            logger.info('Обновляем данные кеша по товарам')
+            menu_cache.save_products()
+        if data['payload']['data']['type'] == 'category':
+            logger.info('Обновляем данные кеша по категориям')
+            menu_cache.save_categories()
+
     return 'ok', 200
 
 
@@ -90,7 +101,6 @@ def handle_menu(sender_id, message_text):
         # product = online_shop.get_product(product_id)
         product = json.loads(db.get(product_id))['product']
         send_message(sender_id, {'text': f'В корзину добавлена пицца {product["name"]}'})
-        show_cart(sender_id, 'cart')
 
     if message_text.startswith('delete_product_'):
         product_id = message_text.replace('delete_product_', '')
@@ -128,16 +138,14 @@ def send_message(recipient_id, message):
 
 def handle_start(sender_id, message_text):
     if message_text == '/start':
-        # TODO начальную категорию вынести в переменные
-        # front_page_category_id = '40874a97-fdb2-452b-81a3-0dfb2dfeee1a'
+
         front_page_category_id = os.environ['FRONT_PAGE_CATEGORY_ID']
     elif message_text.startswith('category_'):
         front_page_category_id = message_text.replace('category_', '')
     else:
         return 'START'
     db = get_database_connection()
-    # TODO лого пиццерии в переменные
-    # pizzeria_logo_url = 'https://image.freepik.com/free-vector/pizza-logo-design-template_15146-192.jpg'
+
     elements = [get_menu_card()]
     logger.info(f'Читаем из кеша товары категории с id {front_page_category_id}')
     category_products = json.loads(db.get(front_page_category_id))
@@ -150,8 +158,7 @@ def handle_start(sender_id, message_text):
 
     logger.info('Читаем категории из кеша')
     categories = json.loads(db.get('categories'))
-    # TODO картинку категорий вынести в переменные
-    # categories_image_url = 'https://primepizza.ru/uploads/position/large_0c07c6fd5c4dcadddaf4a2f1a2c218760b20c396.jpg'
+
     elements.append(
         get_categories_card(categories, front_page_category_id)
     )
@@ -169,8 +176,7 @@ def show_cart(sender_id, message_text):
     cart_id = get_facebook_cart_id(sender_id)
     cart = online_shop.get_cart(cart_id)
     cart_products = online_shop.get_cart_items(cart_id)
-    # TODO картинку корзины вынести в переменные
-    # cart_logo_url = 'https://postium.ru/wp-content/uploads/2018/08/idealnaya-korzina-internet-magazina-1068x713.jpg'
+
     elements = [get_cart_card(cart)]
 
     for product in cart_products:
