@@ -1,4 +1,4 @@
-# Магазин в [Telegram](https://t.me/denpet_bot)
+# Магазин в [Telegram](https://t.me/denpet_bot) и [Facebook](https://www.facebook.com/)
 
 Прямо в [Telegram](https://t.me/denpet_bot) можно оформить и оплатить заказ в онлайн-магазине.
 Магазин работает на платформе [Elastic Path](https://www.elasticpath.com/).
@@ -6,6 +6,7 @@
 При заказе клиент отправляет свой адрес или геолокацию, бот определяет ближайшую торговую точку.
 Если клиент выбрал доставку, а не самовывоз, клиент может оплатить заказ, а курьеру отправляется сигнал – какую пиццу и куда везти.
 
+А так же заказ можно оформить в [Facebook](https://www.facebook.com/)
 
 ## Создание бота в [Telegram](https://telegram.org/)
 Вы получите его API ключ. Выглядит он так:
@@ -19,6 +20,9 @@
 
 Отец ботов попросит ввести два имени. Первое — как он будет отображаться в списке контактов, можно написать на русском. Второе — имя, по которому бота можно будет найти в поиске. Должно быть английском и заканчиваться на bot (например, `notification_bot`)
 
+
+## Создание страницы в [Facebook](https://www.facebook.com/)
+[Здесь](https://gist.github.com/voron434/3765d14574067d17aa9e676145df360e) есть пошаговый туториал.
 
 ## Как установить
 Скачайте проект на свой компьютер.
@@ -34,6 +38,12 @@ STORE_CLIENT_ID='API-ключ интернет магазина'
 STORE_CLIENT_SECRET='пароль интернет магазина'
 YANDEX_GEOCODER_TOKEN='токен яндекс-геокодер'
 BANK_TOKEN='токен платежной системы'
+PAGE_ACCESS_TOKEN='токен для facebook'
+VERIFY_TOKEN='маркер подтверждения webhook'
+FRONT_PAGE_CATEGORY_ID='id начальной категории'
+PIZZERIA_LOGO_URL='url лого пиццерии'
+CATEGORIES_IMAGE_URL='url картинки категорий'
+CART_LOGO_URL='url картинки корзины'
 ```
 
 Аккаунт на платформе [Elastic Path](https://www.elasticpath.com/) должен быть уже заведен. `STORE_CLIENT_ID` и `STORE_CLIENT_SECRET` можно найти на главной странице личного кабинета.
@@ -147,14 +157,21 @@ pip install -r requirements.txt
 ```
 python shop_data.py
 ```
-
+Далее необходимо обновить кэш бота:
+```
+python menu_cache.py
+```
+Кэш будет обновляться автоматически при изменении категории или товара. Для этого надо настроить раздел `Integrations` в настройках онлайн-магазина [Elastic Path](https://www.elasticpath.com/).
 
 
 Для запуска бота [Telegram](https://telegram.org/) на компьютере необходимо ввести в командной строке:
 ```
 python bot.py
 ```
-
+Для запуска бота [Facebook](https://www.facebook.com/) на компьютере необходимо ввести в командной строке:
+```
+python app.py
+```
 
 ## Цель проекта
 Код написан в образовательных целях на онлайн-курсе для веб-разработчиков [dvmn.org](https://dvmn.org/).

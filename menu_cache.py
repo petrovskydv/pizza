@@ -35,12 +35,10 @@ def save_categories():
         db.set(category['id'], json.dumps(products))
 
 
-def get_menu():
-    db = get_database_connection()
-    logger.info('Читаем категории из кеша')
-    categories = json.loads(db.get('categories'))
+def main():
+    save_products()
+    save_categories()
 
-    logger.info('Читаем товары из кеша')
-    all_products = json.loads(db.get('all_products'))
 
-    return {'categories': categories, 'all_products': all_products}
+if __name__ == '__main__':
+    main()
