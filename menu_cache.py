@@ -13,15 +13,11 @@ def save_products():
     for product in all_products:
         image_url = online_shop.get_file_href(product['image_id'])
         logger.info(f'Сохраняем ссылку на изображение товара {product["name"]} в кеш')
-        db.set(
-            product['id'],
-            json.dumps(
-                {
-                    'image_url': image_url,
-                    'product': product
-                }
-            )
-        )
+        product_json = {
+            'image_url': image_url,
+            'product': product
+        }
+        db.set(product['id'], json.dumps(product_json))
 
 
 def save_categories():

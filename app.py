@@ -88,7 +88,7 @@ def handle_users_reply(sender_id, message_text):
         logger.info(f'Записали состояние в БД: {next_state}')
     except requests.HTTPError as e:
         print_exc()
-        logger.error(e.response.text)
+        logger.exception(e)
     except requests.ConnectionError as e:
         print_exc()
         logger.exception(e)
