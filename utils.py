@@ -1,9 +1,13 @@
 import logging
+import os
 
+import redis
 import requests
 from geopy import distance
 
 import online_shop
+
+_database = None
 
 logger = logging.getLogger(__name__)
 
@@ -85,3 +89,24 @@ def save_customer_address(chat_id, current_position):
     }
     address_id = online_shop.create_flow_entry('Customer_Address', customer_address)
     return address_id
+
+
+def get_database_connection():
+    """Соединение с базой банных.
+
+    Возвращает конекшн с базой данных Redis, либо создаёт новый, если он ещё не создан.
+
+    Returns:
+        (:class:`redis.Redis`): Redis client object
+    """
+    global _database
+    if _database is None:
+        database_password = os.environ['REDIS_PASSWORD']
+        database_host = os.environ['REDIS_HOST']
+        database_port = os.environ['REDIS_PORT']
+        _database = redis.Redis(host=database_host, port=database_port, password=database_password)
+    return _database
+
+
+def get_facebook_cart_id(sender_id):
+    return f'facebookid_{sender_id}'

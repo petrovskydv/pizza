@@ -29,15 +29,18 @@ def get_all_products():
     response = requests.get('https://api.moltin.com/v2/products', headers=_headers)
     response.raise_for_status()
     review_result = response.json()
-    products_for_menu = []
-    for product in review_result['data']:
-        product_for_menu = {
-            'id': product['id'],
-            'name': product['name'],
-            'description': product['description'],
-            'price': product['price'][0]['amount']
-        }
-        products_for_menu.append(product_for_menu)
+    products_for_menu = get_products_for_menu(review_result)
+    return products_for_menu
+
+
+@validate_access_token
+def get_products_by_category_id(category_id):
+    logger.info(f'Получаем товар категории с id {category_id}')
+    response = requests.get(f'https://api.moltin.com/v2/products?filter=eq(category.id, {category_id})',
+                            headers=_headers)
+    response.raise_for_status()
+    review_result = response.json()
+    products_for_menu = get_products_for_menu(review_result)
     return products_for_menu
 
 
@@ -45,6 +48,29 @@ def get_all_products():
 def get_product(product_id):
     logger.info(f'Получаем товар с id {product_id}')
     response = requests.get(f'https://api.moltin.com/v2/products/{product_id}', headers=_headers)
+    response.raise_for_status()
+    review_result = response.json()
+    return review_result['data']
+
+
+def get_products_for_menu(review_result):
+    products_for_menu = []
+    for product in review_result['data']:
+        product_for_menu = {
+            'id': product['id'],
+            'name': product['name'],
+            'description': product['description'],
+            'price': product['meta']['display_price']['with_tax']['formatted'],
+            'image_id': product['relationships']['main_image']['data']['id']
+        }
+        products_for_menu.append(product_for_menu)
+    return products_for_menu
+
+
+@validate_access_token
+def get_all_categories():
+    logger.info('Получаем категории')
+    response = requests.get('https://api.moltin.com/v2/categories', headers=_headers)
     response.raise_for_status()
     review_result = response.json()
     return review_result['data']
@@ -196,9 +222,9 @@ def get_entry(flow_slug, entry_id):
 
 
 @validate_access_token
-def get_file_href(product_id):
-    logger.info(f'Получаем ссылку основного изображения товара с id {product_id}')
-    response = requests.get(f'https://api.moltin.com/v2/files/{product_id}', headers=_headers)
+def get_file_href(file_id):
+    logger.info(f'Получаем ссылку основного изображения товара с id {file_id}')
+    response = requests.get(f'https://api.moltin.com/v2/files/{file_id}', headers=_headers)
     response.raise_for_status()
     review_result = response.json()
     return review_result['data']['link']['href']
